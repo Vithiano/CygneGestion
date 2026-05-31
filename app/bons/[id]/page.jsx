@@ -13,6 +13,7 @@ export default function BonDetails({ params }) {
   const [isEditing, setIsEditing] = useState(false);
   const [originalVoucher, setOriginalVoucher] = useState(null);
   const [companyLogo, setCompanyLogo] = useState(null);
+  const [companyData, setCompanyData] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
 
   const [isArticleModalOpen, setIsArticleModalOpen] = useState(false);
@@ -49,6 +50,12 @@ export default function BonDetails({ params }) {
     const savedLogo = localStorage.getItem('companyLogo');
     if (savedLogo) {
       setCompanyLogo(savedLogo);
+    }
+
+    // Récupérer les données du profil entreprise sauvegardées
+    const savedCompanyData = localStorage.getItem('companyData');
+    if (savedCompanyData) {
+      setCompanyData(JSON.parse(savedCompanyData));
     }
 
     async function fetchData() {
@@ -462,9 +469,15 @@ export default function BonDetails({ params }) {
                     <h1 className="text-3xl font-black text-gray-900 tracking-tighter">Cygne<span className="text-primary">Gestion</span></h1>
                   )}
                   <p className="text-sm text-gray-500 mt-2 max-w-xs">
-                    Zone Industrielle, Yopougon<br />
-                    Abidjan, Côte d'Ivoire<br />
-                    +225 01 02 03 04 05
+                    {companyData ? (
+                      <>
+                        {companyData.address && <>{companyData.address}<br /></>}
+                        {companyData.phone && <>{companyData.phone}<br /></>}
+                        {companyData.email && <>{companyData.email}</>}
+                      </>
+                    ) : (
+                      <>Zone Industrielle, Yopougon<br />Abidjan, Côte d'Ivoire<br />+225 01 02 03 04 05</>
+                    )}
                   </p>
                 </div>
                 <div className="text-right">
