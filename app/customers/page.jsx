@@ -1,17 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, Download, ArrowUpDown, UserPlus, Trash2 } from "lucide-react";
 import AdminAuthModal from "@/components/AdminAuthModal";
-
-const initialCustomers = [
-  { id: "CLI-001", name: "Entreprise Alpha", email: "contact@alpha.ci", phone: "+225 01 02 03 04", date: "2023-11-12", status: "Actif" },
-  { id: "CLI-002", name: "Société Beta", email: "info@beta-groupe.com", phone: "+225 05 06 07 08", date: "2024-01-05", status: "Actif" },
-  { id: "CLI-003", name: "Garage du Centre", email: "garage@centre.ci", phone: "+225 07 08 09 10", date: "2024-02-20", status: "Inactif" },
-  { id: "CLI-004", name: "Agro Industrie", email: "achats@agro-ind.com", phone: "+225 01 11 22 33", date: "2024-03-15", status: "Actif" },
-  { id: "CLI-005", name: "Supermarché Express", email: "direction@express.ci", phone: "+225 05 55 44 33", date: "2024-04-10", status: "Actif" },
-];
+import { supabase } from "../../lib/supabase";
 
 const formatDate = (dateString) => {
   const date = new Date(dateString);
@@ -20,12 +13,34 @@ const formatDate = (dateString) => {
 
 export default function CustomersPage() {
   const router = useRouter();
-  const [customers, setCustomers] = useState(initialCustomers);
+  const [customers, setCustomers] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+
+  useEffect(() => {
+    async function fetchCustomers() {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .order('created_at', { ascending: false });
+        
+      if (data) {
+        setCustomers(data.map(c => ({
+          dbId: c.id,
+          id: c.client_id,
+          name: c.name,
+          email: c.email || 'Non renseigné',
+          phone: c.phone || 'Non renseigné',
+          date: c.created_at,
+          status: 'Actif' // Statut fictif pour l'UI, vu que la DB n'a pas de statut actif/inactif par defaut
+        })));
+      }
+    }
+    fetchCustomers();
+  }, []);
 
   const handleDeleteClick = (e, customer) => {
     e.stopPropagation();
@@ -33,9 +48,10 @@ export default function CustomersPage() {
     setAuthModalOpen(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (itemToDelete) {
-      setCustomers(customers.filter(c => c.id !== itemToDelete.id));
+      await supabase.from('clients').delete().eq('id', itemToDelete.dbId);
+      setCustomers(customers.filter(c => c.dbId !== itemToDelete.dbId));
       setAuthModalOpen(false);
       setItemToDelete(null);
     }
@@ -110,7 +126,7 @@ export default function CustomersPage() {
             <tbody className="divide-y divide-gray-100 bg-white">
               {filteredCustomers.length > 0 ? (
                 filteredCustomers.map((customer) => (
-                  <tr key={customer.id} className="hover:bg-primary/5 transition-colors cursor-pointer group">
+                  <tr key={customer.dbId} className="hover:bg-primary/5 transition-colors cursor-pointer group">
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900 group-hover:text-primary transition-colors">{customer.name}</div>
                       <div className="text-gray-500 text-xs mt-0.5">{customer.id}</div>
@@ -130,7 +146,7 @@ export default function CustomersPage() {
                     <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-3">
                         <button 
-                          onClick={() => router.push(`/customers/${customer.id}`)}
+                          onClick={() => router.push(`/customers/${customer.dbId}`)}
                           className="text-primary hover:text-primary/80 font-medium text-sm transition-colors"
                         >
                           Modifier

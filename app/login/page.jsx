@@ -2,19 +2,50 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, ArrowRight, CheckCircle2 } from "lucide-react";
+import { User, Lock, ArrowRight, CheckCircle2, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 
 export default function Login() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [errorModal, setErrorModal] = useState({ isOpen: false, message: "" });
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulation of a network request
-    setTimeout(() => {
-      router.push("/");
-    }, 1000);
+    
+    const pseudo = e.target.pseudo.value;
+    const password = e.target.password.value;
+
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("pseudo", pseudo)
+        .eq("password", password)
+        .single();
+
+      if (error || !data) {
+        setErrorModal({ isOpen: true, message: "Pseudo ou mot de passe incorrect." });
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.status !== "Actif") {
+        setErrorModal({ isOpen: true, message: "Votre compte est inactif. Veuillez contacter un administrateur." });
+        setIsLoading(false);
+        return;
+      }
+
+      // Connexion réussie
+      localStorage.setItem("currentUser", JSON.stringify(data));
+      window.location.href = "/"; // Force a full reload to apply layout changes
+    } catch (err) {
+      console.error(err);
+      setErrorModal({ isOpen: true, message: "Une erreur de réseau est survenue." });
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -35,19 +66,19 @@ export default function Login() {
             <div>
               <form onSubmit={handleLogin} className="space-y-6">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium leading-6 text-gray-900">
-                    Adresse email
+                  <label htmlFor="pseudo" className="block text-sm font-medium leading-6 text-gray-900">
+                    Pseudo (Nom d'utilisateur)
                   </label>
                   <div className="mt-2 relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                     <input
-                      id="email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
+                      id="pseudo"
+                      name="pseudo"
+                      type="text"
+                      autoComplete="username"
                       required
                       className="block w-full rounded-xl border-0 py-2.5 pl-10 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 transition-all"
-                      placeholder="vous@exemple.com"
+                      placeholder="votre_pseudo"
                     />
                   </div>
                 </div>
@@ -61,12 +92,23 @@ export default function Login() {
                     <input
                       id="password"
                       name="password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       autoComplete="current-password"
                       required
-                      className="block w-full rounded-xl border-0 py-2.5 pl-10 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 transition-all"
+                      className="block w-full rounded-xl border-0 py-2.5 pl-10 pr-10 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 transition-all"
                       placeholder="••••••••"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <Eye className="h-5 w-5" aria-hidden="true" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -138,6 +180,30 @@ export default function Login() {
           </ul>
         </div>
       </div>
+
+      {/* Error Modal */}
+      {errorModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 mb-4">
+                <AlertCircle className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Erreur de connexion</h3>
+              <p className="text-sm text-gray-500">{errorModal.message}</p>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setErrorModal({ isOpen: false, message: "" })}
+                className="w-full inline-flex justify-center rounded-xl bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 transition-all"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

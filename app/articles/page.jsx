@@ -1,34 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, PackageOpen, Download, Trash2 } from "lucide-react";
 import AdminAuthModal from "@/components/AdminAuthModal";
-
-const initialArticles = [
-  { id: "ART-001", name: "Ciment CPJ 42.5", category: "Construction", measure: "Tonne", price: "85,000 F CFA", stock: "120 t" },
-  { id: "ART-002", name: "Fer à béton 10mm", category: "Construction", measure: "Botte", price: "45,000 F CFA", stock: "50 Bottes" },
-  { id: "ART-003", name: "Blé Tendre", category: "Agroalimentaire", measure: "Tonne", price: "210,000 F CFA", stock: "500 t" },
-  { id: "ART-004", name: "Riz Parfumé", category: "Agroalimentaire", measure: "Tonne", price: "450,000 F CFA", stock: "80 t" },
-];
+import { supabase } from "../../lib/supabase";
 
 export default function ArticlesPage() {
   const router = useRouter();
-  const [articles, setArticles] = useState(initialArticles);
+  const [articles, setArticles] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
 
+  useEffect(() => {
+    async function fetchArticles() {
+      const { data, error } = await supabase
+        .from('articles')
+        .select('*')
+        .order('name');
+        
+      if (data) {
+        setArticles(data.map(a => ({
+          dbId: a.id,
+          id: a.id.slice(0, 8), // Just for display if there's no reference field
+          name: a.name,
+          category: 'Standard', // Not in DB yet, mock it
+          measure: a.measure,
+          price: new Intl.NumberFormat('fr-FR').format(a.price) + ' F CFA'
+        })));
+      }
+    }
+    fetchArticles();
+  }, []);
+
   const handleDeleteClick = (article) => {
     setItemToDelete(article);
     setAuthModalOpen(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (itemToDelete) {
-      setArticles(articles.filter(a => a.id !== itemToDelete.id));
+      await supabase.from('articles').delete().eq('id', itemToDelete.dbId);
+      setArticles(articles.filter(a => a.dbId !== itemToDelete.dbId));
       setAuthModalOpen(false);
       setItemToDelete(null);
     }
@@ -103,7 +119,7 @@ export default function ArticlesPage() {
             <tbody className="divide-y divide-gray-100 bg-white">
               {filteredArticles.length > 0 ? (
                 filteredArticles.map((article) => (
-                  <tr key={article.id} className="hover:bg-primary/5 transition-colors group">
+                  <tr key={article.dbId} className="hover:bg-primary/5 transition-colors group">
                     <td className="px-6 py-4 font-medium text-gray-900 group-hover:text-primary transition-colors">{article.id}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -123,7 +139,7 @@ export default function ArticlesPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-3">
                         <button 
-                          onClick={() => router.push(`/articles/${article.id}`)}
+                          onClick={() => router.push(`/articles/${article.dbId}`)}
                           className="text-primary hover:text-primary/80 font-medium text-sm transition-colors"
                         >
                           Modifier
@@ -141,7 +157,7 @@ export default function ArticlesPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                     Aucun article trouvé.
                   </td>
                 </tr>

@@ -1,28 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, Plus, Trash2, FileText, Search, XCircle } from "lucide-react";
 import Link from "next/link";
-
-const mockArticlesDatabase = [
-  { id: 1, name: "Ciment CPJ 42.5", measure: "Tonne", price: 85000 },
-  { id: 2, name: "Fer à béton 10mm", measure: "Botte", price: 45000 },
-  { id: 3, name: "Fer à béton 12mm", measure: "Botte", price: 55000 },
-  { id: 4, name: "Sable fin", measure: "Tonne", price: 15000 },
-  { id: 5, name: "Gravier", measure: "Tonne", price: 25000 },
-  { id: 6, name: "Briques pleines", measure: "Unité", price: 200 },
-  { id: 7, name: "Briques creuses", measure: "Unité", price: 150 },
-  { id: 8, name: "Peinture Blanche", measure: "Pot", price: 15000 }
-];
-
-const mockClientsDatabase = [
-  { id: 1, name: "Entreprise Alpha", clientId: "CLI-8372" },
-  { id: 2, name: "BTP Services", clientId: "CLI-9921" },
-  { id: 3, name: "Construction Moderne", clientId: "CLI-1024" },
-  { id: 4, name: "Agence Immobilière Sud", clientId: "CLI-5538" },
-  { id: 5, name: "Société Civile Immobilière", clientId: "CLI-7761" }
-];
+import { supabase } from "../../../lib/supabase";
 
 export default function NewVoucherPage() {
   const router = useRouter();
@@ -36,9 +18,23 @@ export default function NewVoucherPage() {
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
 
+  const [articlesDatabase, setArticlesDatabase] = useState([]);
+  const [clientsDatabase, setClientsDatabase] = useState([]);
+
+  useEffect(() => {
+    async function fetchData() {
+      const { data: articles } = await supabase.from('articles').select('*');
+      const { data: clients } = await supabase.from('clients').select('*');
+      if (articles) setArticlesDatabase(articles);
+      if (clients) setClientsDatabase(clients);
+    }
+    fetchData();
+  }, []);
+
   // Form states
   const [client, setClient] = useState("");
   const [clientId, setClientId] = useState("");
+  const [clientUuid, setClientUuid] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [reference, setReference] = useState("");
   
@@ -106,7 +102,8 @@ export default function NewVoucherPage() {
 
   const handleSelectClient = (clientObj) => {
     setClient(clientObj.name);
-    setClientId(clientObj.clientId);
+    setClientId(clientObj.client_id);
+    setClientUuid(clientObj.id);
     setIsClientModalOpen(false);
   };
 
@@ -118,13 +115,51 @@ export default function NewVoucherPage() {
     return lines.reduce((acc, line) => acc + Number(line.quantity), 0);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulation of a save operation
-    setTimeout(() => {
-      router.push("/vouchers");
-    }, 1000);
+
+    try {
+      // 1. Insert Voucher
+      const { data: voucherData, error: voucherError } = await supabase
+        .from('vouchers')
+        .insert([{
+          reference,
+          client_id: clientUuid || null,
+          date,
+          status: 'Brouillon',
+          total_qty: calculateTotalQuantity(),
+          total_amount: calculateGrandTotal()
+        }])
+        .select()
+        .single();
+
+      if (voucherError) throw voucherError;
+
+      // 2. Insert Voucher Items
+      const itemsToInsert = lines.map(line => ({
+        voucher_id: voucherData.id,
+        po_number: line.poNumber,
+        article_name: line.article,
+        measure: line.measure,
+        quantity: Number(line.quantity),
+        unit_price: Number(line.unitPrice),
+        total: line.total
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('voucher_items')
+        .insert(itemsToInsert);
+
+      if (itemsError) throw itemsError;
+
+      window.location.href = "/vouchers";
+    } catch (error) {
+      console.error('Error saving voucher:', error);
+      alert(`Une erreur est survenue lors de l'enregistrement du bon : ${error.message || JSON.stringify(error)}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -234,7 +269,7 @@ export default function NewVoucherPage() {
         </div>
 
         <div className="overflow-x-auto p-6">
-          <table className="w-full text-left text-sm whitespace-nowrap">
+          <table className="w-full text-left text-sm whitespace-nowrap min-w-[800px]">
             <thead className="text-gray-500 border-b border-gray-100">
               <tr>
                 <th scope="col" className="pb-3 font-medium w-1/5">N° Commande</th>
@@ -345,7 +380,7 @@ export default function NewVoucherPage() {
             <tfoot>
               <tr>
                 <td className="pt-6 text-right font-medium text-gray-500 pr-4" colSpan={3}>Total Général</td>
-                <td className="pt-6 text-right font-bold text-gray-900 px-2">{calculateTotalQuantity()} unités</td>
+                <td className="pt-6 text-right font-bold text-gray-900 px-2">{calculateTotalQuantity()} {lines.length > 0 && lines[0].measure ? lines[0].measure + (calculateTotalQuantity() > 1 && !lines[0].measure.endsWith('s') ? 's' : '') : 'unités'}</td>
                 <td className="pt-6"></td>
                 <td className="pt-6 text-right font-bold text-primary text-lg px-2">
                   {new Intl.NumberFormat('fr-FR').format(calculateGrandTotal())} FCFA
@@ -408,13 +443,13 @@ export default function NewVoucherPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
-              {mockArticlesDatabase.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
+              {articlesDatabase.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
                 <div className="py-8 text-center text-sm text-gray-500">
                   Aucun article ne correspond à "{searchQuery}".
                 </div>
               ) : (
                 <ul className="space-y-1">
-                  {mockArticlesDatabase
+                  {articlesDatabase
                     .filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
                     .map((article) => (
                       <li key={article.id}>
@@ -468,13 +503,13 @@ export default function NewVoucherPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
-              {mockClientsDatabase.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase())).length === 0 ? (
+              {clientsDatabase.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase())).length === 0 ? (
                 <div className="py-8 text-center text-sm text-gray-500">
                   Aucun client ne correspond à "{clientSearchQuery}".
                 </div>
               ) : (
                 <ul className="space-y-1">
-                  {mockClientsDatabase
+                  {clientsDatabase
                     .filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()))
                     .map((client) => (
                       <li key={client.id}>
@@ -487,7 +522,7 @@ export default function NewVoucherPage() {
                             <div className="font-medium text-gray-900 group-hover:text-primary transition-colors">{client.name}</div>
                           </div>
                           <div className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                            {client.clientId}
+                            {client.client_id}
                           </div>
                         </button>
                       </li>

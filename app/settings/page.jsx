@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Building2, Settings2, ShieldCheck, Save, Upload, Users } from "lucide-react";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("company");
   const [isLoading, setIsLoading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const fileInputRef = useRef(null);
 
   // Form states
   const [companyData, setCompanyData] = useState({
@@ -16,6 +18,13 @@ export default function SettingsPage() {
     rccm: "CI-ABJ-2023-B-12345",
     nif: "123456789X"
   });
+
+  useEffect(() => {
+    const savedLogo = localStorage.getItem('companyLogo');
+    if (savedLogo) {
+      setLogoPreview(savedLogo);
+    }
+  }, []);
 
   const [prefsData, setPrefsData] = useState({
     currency: "XOF",
@@ -48,11 +57,34 @@ export default function SettingsPage() {
   const handleSave = (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate save
+    
+    // Save to localStorage for client-side persistence
+    if (logoPreview) {
+      try {
+        localStorage.setItem('companyLogo', logoPreview);
+      } catch (error) {
+        console.error("Storage error:", error);
+        alert("L'image est trop volumineuse pour être sauvegardée. Veuillez choisir une image plus petite (moins de 2 MB).");
+        setIsLoading(false);
+        return;
+      }
+    }
+
     setTimeout(() => {
       setIsLoading(false);
       // Optional: show a success toast here
     }, 800);
+  };
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const tabs = [
@@ -109,11 +141,26 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {/* Logo Upload Mock */}
                   <div className="sm:col-span-2 flex items-center gap-6">
-                    <div className="h-20 w-20 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center shrink-0">
-                      <Building2 className="h-8 w-8 text-gray-400" />
+                    <div className="h-20 w-20 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center shrink-0 overflow-hidden relative group">
+                      {logoPreview ? (
+                        <img src={logoPreview} alt="Logo de l'entreprise" className="h-full w-full object-cover" />
+                      ) : (
+                        <Building2 className="h-8 w-8 text-gray-400" />
+                      )}
                     </div>
                     <div>
-                      <button type="button" className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleLogoChange}
+                        accept="image/png, image/jpeg, image/svg+xml"
+                        className="hidden" 
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                      >
                         <Upload className="h-4 w-4" />
                         Changer le logo
                       </button>

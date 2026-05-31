@@ -1,44 +1,87 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "../../../lib/supabase";
 
 export default function CustomerFormPage({ params }) {
   const router = useRouter();
   const isNew = params.id === "new";
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(!isNew);
 
-  // Mock initial data if editing
-  const initialData = isNew ? {
+  const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
     address: "",
     status: "Actif"
-  } : {
-    name: "Entreprise Alpha",
-    email: "contact@alpha.ci",
-    phone: "+225 01 02 03 04",
-    address: "Abidjan, Cocody",
-    status: "Actif"
-  };
+  });
 
-  const [formData, setFormData] = useState(initialData);
+  useEffect(() => {
+    async function fetchCustomer() {
+      if (!isNew) {
+        const { data, error } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', params.id)
+          .single();
+          
+        if (data) {
+          setFormData({
+            name: data.name || "",
+            email: data.email || "",
+            phone: data.phone || "",
+            address: data.address || "",
+            status: "Actif"
+          });
+        }
+        setIsFetching(false);
+      }
+    }
+    fetchCustomer();
+  }, [params.id, isNew]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulation of a save operation
-    setTimeout(() => {
-      router.push("/customers");
-    }, 800);
+    
+    const payload = {
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone
+    };
+
+    if (isNew) {
+      payload.client_id = formData.name.substring(0, 3).toUpperCase() + '-' + Date.now().toString().slice(-4);
+      const { error } = await supabase.from('clients').insert([payload]);
+      if (error) {
+        alert("Erreur lors de la création du client : " + error.message);
+        setIsLoading(false);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from('clients').update(payload).eq('id', params.id);
+      if (error) {
+        alert("Erreur lors de la modification du client : " + error.message);
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    router.refresh();
+    window.location.href = "/customers";
   };
+
+  if (isFetching) {
+    return <div className="p-8 text-center text-gray-500">Chargement des données...</div>;
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

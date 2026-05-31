@@ -1,33 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, FileText, CheckCircle, Clock, XCircle, Printer, Edit, Download, Trash2, Plus, Search } from "lucide-react";
-
-const mockArticlesDatabase = [
-  { id: 1, name: "Ciment CPJ 42.5", measure: "Tonne", price: 85000 },
-  { id: 2, name: "Fer à béton 10mm", measure: "Botte", price: 45000 },
-  { id: 3, name: "Fer à béton 12mm", measure: "Botte", price: 55000 },
-  { id: 4, name: "Sable fin", measure: "Tonne", price: 15000 },
-  { id: 5, name: "Gravier", measure: "Tonne", price: 25000 },
-  { id: 6, name: "Briques pleines", measure: "Unité", price: 200 },
-  { id: 7, name: "Briques creuses", measure: "Unité", price: 150 },
-  { id: 8, name: "Peinture Blanche", measure: "Pot", price: 15000 }
-];
-
-const mockClientsDatabase = [
-  { id: 1, name: "Entreprise Alpha", clientId: "CLI-8372" },
-  { id: 2, name: "BTP Services", clientId: "CLI-9921" },
-  { id: 3, name: "Construction Moderne", clientId: "CLI-1024" },
-  { id: 4, name: "Agence Immobilière Sud", clientId: "CLI-5538" },
-  { id: 5, name: "Société Civile Immobilière", clientId: "CLI-7761" }
-];
+import { supabase } from "../../../lib/supabase";
 
 export default function BonDetails({ params }) {
   const { id } = params;
+  const router = useRouter();
 
   const [isEditing, setIsEditing] = useState(false);
   const [originalVoucher, setOriginalVoucher] = useState(null);
+  const [companyLogo, setCompanyLogo] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   const [isArticleModalOpen, setIsArticleModalOpen] = useState(false);
   const [activeItemIndex, setActiveItemIndex] = useState(null);
@@ -36,19 +22,78 @@ export default function BonDetails({ params }) {
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
 
+  const [articlesDatabase, setArticlesDatabase] = useState([]);
+  const [clientsDatabase, setClientsDatabase] = useState([]);
+
   const [voucher, setVoucher] = useState({
     id: id,
-    client: "Entreprise Alpha",
-    clientId: "CLI-8372",
-    date: "2024-05-20",
-    status: "Validé",
-    items: [
-      { article: "Ciment CPJ 42.5", measure: "Tonne", poNumber: "BC-1029", qty: 10, price: 85000, total: 850000 },
-      { article: "Fer à béton 10mm", measure: "Botte", poNumber: "BC-1029", qty: 5, price: 45000, total: 225000 }
-    ],
-    totalAmount: 1075000,
-    totalQty: 15
+    dbId: "",
+    client: "",
+    clientId: "",
+    clientUuid: "",
+    date: new Date().toISOString().split('T')[0],
+    status: "",
+    items: [],
+    totalAmount: 0,
+    totalQty: 0
   });
+
+  useEffect(() => {
+    // Récupérer l'utilisateur courant
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+      setCurrentUser(JSON.parse(savedUser));
+    }
+
+    // Récupérer le logo stocké s'il existe
+    const savedLogo = localStorage.getItem('companyLogo');
+    if (savedLogo) {
+      setCompanyLogo(savedLogo);
+    }
+
+    async function fetchData() {
+      // Fetch articles and clients for modals
+      const { data: articles } = await supabase.from('articles').select('*');
+      const { data: clients } = await supabase.from('clients').select('*');
+      if (articles) setArticlesDatabase(articles);
+      if (clients) setClientsDatabase(clients);
+
+      // Fetch Voucher
+      const { data: v } = await supabase
+        .from('vouchers')
+        .select('*, clients(name, client_id)')
+        .eq('id', id)
+        .single();
+        
+      if (v) {
+        const { data: items } = await supabase
+          .from('voucher_items')
+          .select('*')
+          .eq('voucher_id', v.id);
+
+        setVoucher({
+          id: v.reference,
+          dbId: v.id,
+          client: v.clients?.name || 'Inconnu',
+          clientId: v.clients?.client_id || '',
+          clientUuid: v.client_id,
+          date: v.date,
+          status: v.status,
+          items: items ? items.map(item => ({
+            article: item.article_name,
+            measure: item.measure,
+            poNumber: item.po_number || "",
+            qty: Number(item.quantity),
+            price: Number(item.unit_price),
+            total: Number(item.total)
+          })) : [],
+          totalAmount: Number(v.total_amount),
+          totalQty: Number(v.total_qty)
+        });
+      }
+    }
+    fetchData();
+  }, [id]);
 
   const handleEditClick = () => {
     setOriginalVoucher(JSON.parse(JSON.stringify(voucher)));
@@ -60,9 +105,42 @@ export default function BonDetails({ params }) {
     setIsEditing(false);
   };
 
-  const handleSaveClick = () => {
+  const handleSaveClick = async () => {
     setIsEditing(false);
-    // Simulation of API save here
+    try {
+      const { error: updateError } = await supabase.from('vouchers').update({
+        client_id: voucher.clientUuid,
+        date: voucher.date,
+        status: voucher.status,
+        total_qty: voucher.totalQty,
+        total_amount: voucher.totalAmount
+      }).eq('id', voucher.dbId);
+
+      if (updateError) throw updateError;
+
+      const { error: deleteError } = await supabase.from('voucher_items').delete().eq('voucher_id', voucher.dbId);
+      if (deleteError) throw deleteError;
+      
+      if (voucher.items.length > 0) {
+        const itemsToInsert = voucher.items.map(line => ({
+          voucher_id: voucher.dbId,
+          po_number: line.poNumber,
+          article_name: line.article,
+          measure: line.measure,
+          quantity: line.qty,
+          unit_price: line.price,
+          total: line.total
+        }));
+        const { error: insertError } = await supabase.from('voucher_items').insert(itemsToInsert);
+        if (insertError) throw insertError;
+      }
+      
+      // Force reload to avoid stale cache issues when navigating back
+      window.location.reload();
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour", error);
+      alert("Une erreur est survenue lors de la sauvegarde: " + (error.message || "Erreur inconnue"));
+    }
   };
 
   const updateVoucherField = (field, value) => {
@@ -129,7 +207,7 @@ export default function BonDetails({ params }) {
   };
 
   const handleSelectClient = (clientObj) => {
-    setVoucher({ ...voucher, client: clientObj.name, clientId: clientObj.clientId });
+    setVoucher({ ...voucher, client: clientObj.name, clientId: clientObj.client_id, clientUuid: clientObj.id });
     setIsClientModalOpen(false);
   };
 
@@ -311,7 +389,11 @@ export default function BonDetails({ params }) {
                               <Search className="w-4 h-4" />
                             </button>
                           </div>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <div>
+                              <label className="text-[10px] text-gray-500">N° Commande</label>
+                              <input type="text" value={item.poNumber} onChange={(e) => updateItem(idx, 'poNumber', e.target.value)} placeholder="PO-..." className="block w-full rounded-md border-gray-300 py-1.5 px-2 shadow-sm text-sm ring-1 ring-inset ring-gray-300" />
+                            </div>
                             <div>
                               <label className="text-[10px] text-gray-500">Unité</label>
                               <input type="text" value={item.measure} onChange={(e) => updateItem(idx, 'measure', e.target.value)} placeholder="Tonne, Kg..." className="block w-full rounded-md border-gray-300 py-1.5 px-2 shadow-sm text-sm ring-1 ring-inset ring-gray-300" />
@@ -362,9 +444,9 @@ export default function BonDetails({ params }) {
         </div>
 
         {/* COLUMN RIGHT: PDF Preview */}
-        <div className={!isEditing ? 'lg:col-span-2' : ''}>
+        <div className={`overflow-x-auto pb-4 ${!isEditing ? 'lg:col-span-2' : ''}`}>
           {/* A4 Paper Container */}
-          <div id="pdf-document" className="bg-white rounded-md shadow-xl border border-gray-200 aspect-[1/1.414] w-full max-w-3xl mx-auto overflow-hidden relative print:shadow-none print:border-none print:aspect-auto print:max-w-full">
+          <div id="pdf-document" className="bg-white rounded-md shadow-xl border border-gray-200 aspect-[1/1.414] min-w-[700px] w-full max-w-3xl mx-auto overflow-hidden relative print:shadow-none print:border-none print:aspect-auto print:max-w-full print:min-w-0">
             
             {/* Top decorative bar */}
             <div className="absolute top-0 left-0 right-0 h-3 bg-primary"></div>
@@ -374,7 +456,11 @@ export default function BonDetails({ params }) {
               {/* Header */}
               <div className="flex justify-between items-start mb-12">
                 <div>
-                  <h1 className="text-3xl font-black text-gray-900 tracking-tighter">Cygne<span className="text-primary">Gestion</span></h1>
+                  {companyLogo ? (
+                    <img src={companyLogo} alt="Logo Entreprise" className="h-12 object-contain" />
+                  ) : (
+                    <h1 className="text-3xl font-black text-gray-900 tracking-tighter">Cygne<span className="text-primary">Gestion</span></h1>
+                  )}
                   <p className="text-sm text-gray-500 mt-2 max-w-xs">
                     Zone Industrielle, Yopougon<br />
                     Abidjan, Côte d'Ivoire<br />
@@ -397,27 +483,27 @@ export default function BonDetails({ params }) {
 
               {/* Table */}
               <div className="flex-grow">
-                <table className="w-full text-left text-sm mb-6">
+                <table className="w-full text-left text-xs mb-6">
                   <thead>
                     <tr className="border-b-2 border-gray-900">
-                      <th className="pb-2 font-bold text-gray-900">Description</th>
-                      <th className="pb-2 font-bold text-gray-900 text-center">N° BC</th>
-                      <th className="pb-2 font-bold text-gray-900 text-right">Qté</th>
-                      <th className="pb-2 font-bold text-gray-900 text-right">P.U (CFA)</th>
-                      <th className="pb-2 font-bold text-gray-900 text-right">Total (CFA)</th>
+                      <th className="pb-1.5 font-bold text-gray-900">Description</th>
+                      <th className="pb-1.5 font-bold text-gray-900 text-center">N° BC</th>
+                      <th className="pb-1.5 font-bold text-gray-900 text-right">Qté</th>
+                      <th className="pb-1.5 font-bold text-gray-900 text-right">P.U (CFA)</th>
+                      <th className="pb-1.5 font-bold text-gray-900 text-right">Total (CFA)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {voucher.items.map((item, idx) => (
                       <tr key={idx}>
-                        <td className="py-3 text-gray-800">
+                        <td className="py-1.5 text-gray-800">
                           <span className="font-medium">{item.article}</span>
-                          <span className="block text-xs text-gray-500">Unité : {item.measure}</span>
+                          <span className="block text-[10px] text-gray-500">Unité : {item.measure}</span>
                         </td>
-                        <td className="py-3 text-gray-600 text-center">{item.poNumber}</td>
-                        <td className="py-3 text-gray-800 text-right">{item.qty}</td>
-                        <td className="py-3 text-gray-600 text-right">{item.price.toLocaleString()}</td>
-                        <td className="py-3 font-medium text-gray-900 text-right">{item.total.toLocaleString()}</td>
+                        <td className="py-1.5 text-gray-600 text-center">{item.poNumber}</td>
+                        <td className="py-1.5 text-gray-800 text-right">{item.qty}</td>
+                        <td className="py-1.5 text-gray-600 text-right">{item.price.toLocaleString()}</td>
+                        <td className="py-1.5 font-medium text-gray-900 text-right">{item.total.toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -430,7 +516,7 @@ export default function BonDetails({ params }) {
                   <div className="w-1/2">
                     <div className="flex justify-between py-2 border-b border-gray-100">
                       <span className="text-gray-600 text-sm">Quantité totale</span>
-                      <span className="font-medium text-gray-900">{voucher.totalQty} Unités</span>
+                      <span className="font-medium text-gray-900">{voucher.totalQty} {voucher.items.length > 0 && voucher.items[0].measure ? voucher.items[0].measure + (voucher.totalQty > 1 && !voucher.items[0].measure.endsWith('s') ? 's' : '') : 'Unités'}</span>
                     </div>
                     <div className="flex justify-between py-3 border-b-2 border-gray-900">
                       <span className="font-bold text-gray-900">Montant Global</span>
@@ -449,7 +535,8 @@ export default function BonDetails({ params }) {
                 </div>
                 
                 <div className="mt-8 text-center text-xs text-gray-400">
-                  <p>Document généré automatiquement par CygneGestion.</p>
+                  <p>Édité par : <span className="font-semibold text-gray-600">{currentUser?.name || "Administrateur"}</span></p>
+                  <p className="mt-1 text-[10px]">Document généré automatiquement par CygneGestion.</p>
                 </div>
               </div>
               
@@ -486,13 +573,13 @@ export default function BonDetails({ params }) {
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
-              {mockArticlesDatabase.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
+              {articlesDatabase.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
                 <div className="py-8 text-center text-sm text-gray-500">
                   Aucun article ne correspond à "{searchQuery}".
                 </div>
               ) : (
                 <ul className="space-y-1">
-                  {mockArticlesDatabase
+                  {articlesDatabase
                     .filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
                     .map((article) => (
                       <li key={article.id}>
@@ -545,13 +632,13 @@ export default function BonDetails({ params }) {
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
-              {mockClientsDatabase.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase())).length === 0 ? (
+              {clientsDatabase.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase())).length === 0 ? (
                 <div className="py-8 text-center text-sm text-gray-500">
                   Aucun client ne correspond à "{clientSearchQuery}".
                 </div>
               ) : (
                 <ul className="space-y-1">
-                  {mockClientsDatabase
+                  {clientsDatabase
                     .filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()))
                     .map((client) => (
                       <li key={client.id}>
@@ -564,7 +651,7 @@ export default function BonDetails({ params }) {
                             <div className="font-medium text-gray-900 group-hover:text-primary transition-colors">{client.name}</div>
                           </div>
                           <div className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                            {client.clientId}
+                            {client.client_id}
                           </div>
                         </button>
                       </li>

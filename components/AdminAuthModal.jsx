@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Shield, X, KeyRound } from "lucide-react";
+import { Shield, X, KeyRound, Eye, EyeOff } from "lucide-react";
 
 export default function AdminAuthModal({ isOpen, onClose, onConfirm, itemName }) {
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
 
@@ -63,7 +64,7 @@ export default function AdminAuthModal({ isOpen, onClose, onConfirm, itemName })
                   <KeyRound className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   id="admin-password"
                   value={password}
                   onChange={(e) => {
@@ -73,12 +74,23 @@ export default function AdminAuthModal({ isOpen, onClose, onConfirm, itemName })
                   required
                   autoFocus
                   placeholder="••••••••"
-                  className={`block w-full pl-10 pr-3 py-2 border rounded-lg shadow-sm sm:text-sm focus:ring-2 focus:ring-offset-0 transition-colors ${
+                  className={`block w-full pl-10 pr-10 py-2 border rounded-lg shadow-sm sm:text-sm focus:ring-2 focus:ring-offset-0 transition-colors ${
                     error 
                       ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 text-red-900 placeholder-red-300" 
                       : "border-gray-300 focus:border-primary focus:ring-primary/20 text-gray-900"
                   }`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
               </div>
               {error && (
                 <p className="mt-2 text-sm text-red-600 animate-in slide-in-from-top-1 fade-in duration-200">

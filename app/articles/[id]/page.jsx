@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, PackagePlus, Edit, X } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "../../../lib/supabase";
 
 export default function ArticleFormPage({ params }) {
   const router = useRouter();
@@ -11,36 +12,71 @@ export default function ArticleFormPage({ params }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isCustomCategory, setIsCustomCategory] = useState(false);
 
-  // Mock initial data if editing
-  const initialData = isNew ? {
+  const [formData, setFormData] = useState({
     name: "",
     reference: "",
     category: "",
     measure: "",
     price: "",
     description: ""
-  } : {
-    name: "Ciment CPJ 42.5",
-    reference: params.id,
-    category: "Construction",
-    measure: "Tonne",
-    price: "85000",
-    description: "Ciment de haute qualité pour construction"
-  };
+  });
 
-  const [formData, setFormData] = useState(initialData);
+  useEffect(() => {
+    async function fetchArticle() {
+      if (!isNew) {
+        const { data, error } = await supabase
+          .from('articles')
+          .select('*')
+          .eq('id', params.id)
+          .single();
+          
+        if (data) {
+          setFormData({
+            name: data.name || "",
+            reference: params.id, // Assuming ID is shown as reference, or if there's a reference field
+            category: "Standard", // Mock
+            measure: data.measure || "",
+            price: data.price || "",
+            description: ""
+          });
+        }
+      }
+    }
+    fetchArticle();
+  }, [params.id, isNew]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulation of a save operation
-    setTimeout(() => {
-      router.push("/articles");
-    }, 800);
+    
+    const payload = {
+      name: formData.name,
+      measure: formData.measure,
+      price: Number(formData.price) || 0
+    };
+
+    if (isNew) {
+      const { error } = await supabase.from('articles').insert([payload]);
+      if (error) {
+        alert("Erreur lors de la création de l'article : " + error.message);
+        setIsLoading(false);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from('articles').update(payload).eq('id', params.id);
+      if (error) {
+        alert("Erreur lors de la modification de l'article : " + error.message);
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    router.refresh();
+    window.location.href = "/articles";
   };
 
   return (

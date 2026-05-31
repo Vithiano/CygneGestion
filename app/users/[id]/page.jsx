@@ -1,48 +1,95 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, UserPlus, UserCog, Eye, EyeOff, X } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "../../../lib/supabase";
 
 export default function UserFormPage({ params }) {
   const router = useRouter();
   const isNew = params.id === "new";
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(!isNew);
   const [showPassword, setShowPassword] = useState(false);
   const [isCustomRole, setIsCustomRole] = useState(false);
 
-  // Mock data fetching for edit mode
-  const initialData = isNew ? {
+  const [formData, setFormData] = useState({
     name: "",
-    email: "", // Can be used for login/contact
+    pseudo: "",
+    email: "", 
     fonction: "",
     role: "",
     status: "Actif",
     password: ""
-  } : {
-    name: "Lionel VITHIANO", // Mock data
-    email: "lionel@cygnegastion.ci",
-    fonction: "Directeur Général",
-    role: "Administrateur",
-    status: "Actif",
-    password: "" // Left blank intentionally for security
-  };
+  });
 
-  const [formData, setFormData] = useState(initialData);
+  useEffect(() => {
+    async function fetchUser() {
+      if (!isNew) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', params.id)
+          .single();
+          
+        if (data) {
+          setFormData({
+            name: data.name || "",
+            pseudo: data.pseudo || "",
+            email: data.email || "",
+            fonction: data.fonction || "",
+            role: data.role || "",
+            status: data.status || "Actif",
+            password: data.password || "" // On laisse le mot de passe vide par sécurité ou on affiche le mot de passe si on est en clair
+          });
+        }
+        setIsFetching(false);
+      }
+    }
+    fetchUser();
+  }, [params.id, isNew]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulation of a save operation
-    setTimeout(() => {
-      router.push("/users");
-    }, 800);
+    
+    const payload = {
+      name: formData.name,
+      pseudo: formData.pseudo,
+      email: formData.email,
+      role: formData.role,
+      status: formData.status,
+      password: formData.password // À sécuriser/hacher plus tard lors de l'intégration finale de l'authentification
+    };
+
+    if (isNew) {
+      payload.user_id = 'USR-' + Date.now().toString().slice(-4);
+      const { error } = await supabase.from('users').insert([payload]);
+      if (error) {
+        alert("Erreur lors de la création de l'utilisateur : " + error.message);
+        setIsLoading(false);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from('users').update(payload).eq('id', params.id);
+      if (error) {
+        alert("Erreur lors de la modification de l'utilisateur : " + error.message);
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    window.location.href = "/users";
   };
+
+  if (isFetching) {
+    return <div className="p-8 text-center text-gray-500">Chargement des données...</div>;
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -110,8 +157,26 @@ export default function UserFormPage({ params }) {
             </div>
 
             <div className="sm:col-span-1">
+              <label htmlFor="pseudo" className="block text-sm font-medium leading-6 text-gray-900">
+                Pseudo (Nom d'utilisateur) <span className="text-red-500">*</span>
+              </label>
+              <div className="mt-2">
+                <input
+                  type="text"
+                  name="pseudo"
+                  id="pseudo"
+                  value={formData.pseudo}
+                  onChange={handleChange}
+                  required
+                  placeholder="Ex: jdupont"
+                  className="block w-full rounded-md border-0 py-2.5 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
+                />
+              </div>
+            </div>
+
+            <div className="sm:col-span-1">
               <label htmlFor="email" className="block text-sm font-medium leading-6 text-gray-900">
-                Adresse Email (Identifiant)
+                Adresse Email
               </label>
               <div className="mt-2">
                 <input

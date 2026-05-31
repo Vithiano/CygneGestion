@@ -1,22 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Shield, UserPlus, Mail, Trash2 } from "lucide-react";
 import AdminAuthModal from "@/components/AdminAuthModal";
-
-const initialUsers = [
-  { id: "USR-001", name: "Lionel VITHIANO", email: "lionel@cygnegastion.ci", role: "Administrateur", status: "Actif", lastLogin: "Aujourd'hui à 08:30" },
-  { id: "USR-002", name: "Marc Dupont", email: "m.dupont@cygnegastion.ci", role: "Opérateur", status: "Actif", lastLogin: "Hier à 14:15" },
-  { id: "USR-003", name: "Awa Koné", email: "a.kone@cygnegastion.ci", role: "Manager", status: "Actif", lastLogin: "Aujourd'hui à 09:12" },
-  { id: "USR-004", name: "Jean Touré", email: "j.toure@cygnegastion.ci", role: "Opérateur", status: "Inactif", lastLogin: "Il y a 2 semaines" },
-];
+import { supabase } from "../../lib/supabase";
 
 export default function UsersPage() {
   const router = useRouter();
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+
+  useEffect(() => {
+    async function fetchUsers() {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+        
+      if (data) {
+        setUsers(data.map(u => ({
+          dbId: u.id,
+          id: u.user_id,
+          name: u.name,
+          pseudo: u.pseudo || 'Non renseigné',
+          email: u.email || 'Non renseigné',
+          role: u.role,
+          status: u.status,
+          lastLogin: u.last_login ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(u.last_login)) : 'Jamais'
+        })));
+      }
+    }
+    fetchUsers();
+  }, []);
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
@@ -26,9 +43,10 @@ export default function UsersPage() {
     setAuthModalOpen(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (itemToDelete) {
-      setUsers(users.filter(u => u.id !== itemToDelete.id));
+      await supabase.from('users').delete().eq('id', itemToDelete.dbId);
+      setUsers(users.filter(u => u.dbId !== itemToDelete.dbId));
       setAuthModalOpen(false);
       setItemToDelete(null);
     }
@@ -36,6 +54,7 @@ export default function UsersPage() {
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          user.pseudo.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           user.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter ? user.role === roleFilter : true;
     return matchesSearch && matchesRole;
@@ -90,6 +109,7 @@ export default function UsersPage() {
             <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
               <tr>
                 <th scope="col" className="px-6 py-4 font-semibold">Utilisateur</th>
+                <th scope="col" className="px-6 py-4 font-semibold">Pseudo</th>
                 <th scope="col" className="px-6 py-4 font-semibold text-center">Rôle</th>
                 <th scope="col" className="px-6 py-4 font-semibold text-center">Dernière connexion</th>
                 <th scope="col" className="px-6 py-4 font-semibold text-center">Statut</th>
@@ -114,6 +134,7 @@ export default function UsersPage() {
                         </div>
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-gray-600 font-medium">@{user.pseudo}</td>
                     <td className="px-6 py-4 text-center">
                       <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 ring-1 ring-inset ring-gray-500/10">
                         <Shield className="h-3 w-3 text-gray-400" />
@@ -131,7 +152,7 @@ export default function UsersPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-3">
                         <button 
-                          onClick={() => router.push(`/users/${user.id}`)}
+                          onClick={() => router.push(`/users/${user.dbId}`)}
                           className="text-primary hover:text-primary/80 font-medium text-sm transition-colors"
                         >
                           Modifier

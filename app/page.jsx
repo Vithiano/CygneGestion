@@ -3,41 +3,29 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, FileText, Users, DollarSign, Search, Filter } from "lucide-react";
-
-const stats = [
-  { name: "Total des Bons", value: "245", change: "+12%", changeType: "positive", icon: FileText },
-  { name: "Nouveaux Clients", value: "14", change: "+4%", changeType: "positive", icon: Users },
-  { name: "Revenus Estimés", value: "4,500,000 F CFA", change: "+24%", changeType: "positive", icon: DollarSign },
-];
-
-const recentVouchers = [
-  { id: "BON-2024-001", client: "Entreprise Alpha", date: "2024-05-20", mesure: "15 t", amount: "150,000 F CFA", status: "Validé" },
-  { id: "BON-2024-002", client: "Société Beta", date: "2024-05-19", mesure: "34 t", amount: "340,000 F CFA", status: "En attente" },
-  { id: "BON-2024-003", client: "Garage du Centre", date: "2024-05-18", mesure: "8.5 t", amount: "85,000 F CFA", status: "Validé" },
-  { id: "BON-2024-004", client: "Pharmacie Sante", date: "2024-05-18", mesure: "21 t", amount: "210,000 F CFA", status: "Rejeté" },
-  { id: "BON-2024-005", client: "Agro Industrie", date: "2024-05-17", mesure: "50 t", amount: "500,000 F CFA", status: "Validé" },
-  { id: "BON-2024-006", client: "Boulangerie Moderne", date: "2024-05-16", mesure: "12 t", amount: "120,000 F CFA", status: "En attente" },
-  { id: "BON-2024-007", client: "Supermarché Express", date: "2024-05-15", mesure: "45 t", amount: "450,000 F CFA", status: "Validé" },
-  { id: "BON-2024-008", client: "Quincaillerie Pro", date: "2024-05-15", mesure: "5 t", amount: "50,000 F CFA", status: "Validé" },
-  { id: "BON-2024-009", client: "Transports Rapides", date: "2024-05-14", mesure: "28 t", amount: "280,000 F CFA", status: "Validé" },
-  { id: "BON-2024-010", client: "Bâtiment & Co", date: "2024-05-14", mesure: "110 t", amount: "1,100,000 F CFA", status: "En attente" },
-  { id: "BON-2024-011", client: "Menuiserie Plus", date: "2024-05-13", mesure: "3 t", amount: "30,000 F CFA", status: "Validé" },
-  { id: "BON-2024-012", client: "Fermes Unies", date: "2024-05-12", mesure: "18 t", amount: "180,000 F CFA", status: "Rejeté" },
-];
+import { supabase } from "../lib/supabase";
 
 const formatDate = (dateString) => {
+  if (!dateString) return '';
   const date = new Date(dateString);
   return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 };
 
 export default function Dashboard() {
   const router = useRouter();
+  const [recentVouchers, setRecentVouchers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+
+  const [stats, setStats] = useState([
+    { name: "Total des Bons", value: "0", change: "", changeType: "neutral", icon: FileText },
+    { name: "Nouveaux Clients", value: "0", change: "", changeType: "neutral", icon: Users },
+    { name: "Revenus Estimés", value: "0 F CFA", change: "", changeType: "neutral", icon: DollarSign },
+  ]);
 
   const filteredVouchers = recentVouchers.filter((voucher) => {
     const matchesSearch = voucher.client.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -63,6 +51,50 @@ export default function Dashboard() {
   const totalPages = Math.max(1, Math.ceil(filteredVouchers.length / itemsPerPage));
   const validCurrentPage = Math.min(currentPage, totalPages);
   const currentVouchers = filteredVouchers.slice((validCurrentPage - 1) * itemsPerPage, validCurrentPage * itemsPerPage);
+
+  useEffect(() => {
+    async function fetchVouchers() {
+      const { data, error } = await supabase
+        .from('vouchers')
+        .select(`
+          id,
+          reference,
+          date,
+          status,
+          total_qty,
+          total_amount,
+          clients (name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (data) {
+        const formatted = data.map(v => ({
+          dbId: v.id,
+          id: v.reference,
+          client: v.clients?.name || 'Inconnu',
+          date: v.date,
+          mesure: v.total_qty,
+          amount: new Intl.NumberFormat('fr-FR').format(v.total_amount) + ' FCFA',
+          status: v.status
+        }));
+        setRecentVouchers(formatted);
+      }
+
+      // Calcul des statistiques
+      const { count: vouchersCount } = await supabase.from('vouchers').select('*', { count: 'exact', head: true });
+      const { count: clientsCount } = await supabase.from('clients').select('*', { count: 'exact', head: true });
+      const { data: vouchersForRev } = await supabase.from('vouchers').select('total_amount');
+      
+      const totalRevenue = vouchersForRev ? vouchersForRev.reduce((sum, v) => sum + (Number(v.total_amount) || 0), 0) : 0;
+
+      setStats([
+        { name: "Total des Bons", value: vouchersCount ? vouchersCount.toString() : "0", change: "", changeType: "neutral", icon: FileText },
+        { name: "Nouveaux Clients", value: clientsCount ? clientsCount.toString() : "0", change: "", changeType: "neutral", icon: Users },
+        { name: "Revenus Estimés", value: new Intl.NumberFormat('fr-FR').format(totalRevenue) + " F CFA", change: "", changeType: "neutral", icon: DollarSign },
+      ]);
+    }
+    fetchVouchers();
+  }, []);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -164,8 +196,8 @@ export default function Dashboard() {
             <tbody className="divide-y divide-gray-100">
               {currentVouchers.map((voucher) => (
                 <tr 
-                  key={voucher.id} 
-                  onClick={() => router.push(`/bons/${voucher.id}`)}
+                  key={voucher.dbId} 
+                  onClick={() => router.push(`/bons/${voucher.dbId}`)}
                   className="hover:bg-gray-50/50 transition-colors cursor-pointer"
                 >
                   <td className="px-6 py-4 font-medium text-gray-900">{voucher.id}</td>

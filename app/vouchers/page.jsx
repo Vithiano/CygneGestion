@@ -1,24 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, Filter, Download, ArrowUpDown, MoreHorizontal, Trash2 } from "lucide-react";
 import AdminAuthModal from "@/components/AdminAuthModal";
-
-const initialVouchers = [
-  { id: "BON-2024-001", client: "Entreprise Alpha", date: "2024-05-20", mesure: "15 t", amount: "150,000 F CFA", status: "Validé" },
-  { id: "BON-2024-002", client: "Société Beta", date: "2024-05-19", mesure: "34 t", amount: "340,000 F CFA", status: "En attente" },
-  { id: "BON-2024-003", client: "Garage du Centre", date: "2024-05-18", mesure: "8.5 t", amount: "85,000 F CFA", status: "Validé" },
-  { id: "BON-2024-004", client: "Pharmacie Sante", date: "2024-05-18", mesure: "21 t", amount: "210,000 F CFA", status: "Rejeté" },
-  { id: "BON-2024-005", client: "Agro Industrie", date: "2024-05-17", mesure: "50 t", amount: "500,000 F CFA", status: "Validé" },
-  { id: "BON-2024-006", client: "Boulangerie Moderne", date: "2024-05-16", mesure: "12 t", amount: "120,000 F CFA", status: "En attente" },
-  { id: "BON-2024-007", client: "Supermarché Express", date: "2024-05-15", mesure: "45 t", amount: "450,000 F CFA", status: "Validé" },
-  { id: "BON-2024-008", client: "Quincaillerie Pro", date: "2024-05-15", mesure: "5 t", amount: "50,000 F CFA", status: "Validé" },
-  { id: "BON-2024-009", client: "Transports Rapides", date: "2024-05-14", mesure: "28 t", amount: "280,000 F CFA", status: "Validé" },
-  { id: "BON-2024-010", client: "Bâtiment & Co", date: "2024-05-14", mesure: "110 t", amount: "1,100,000 F CFA", status: "En attente" },
-  { id: "BON-2024-011", client: "Menuiserie Plus", date: "2024-05-13", mesure: "3 t", amount: "30,000 F CFA", status: "Validé" },
-  { id: "BON-2024-012", client: "Fermes Unies", date: "2024-05-12", mesure: "18 t", amount: "180,000 F CFA", status: "Rejeté" },
-];
+import { supabase } from "../../lib/supabase";
 
 const formatDate = (dateString) => {
   const date = new Date(dateString);
@@ -27,7 +13,7 @@ const formatDate = (dateString) => {
 
 export default function VouchersPage() {
   const router = useRouter();
-  const [allVouchers, setAllVouchers] = useState(initialVouchers);
+  const [allVouchers, setAllVouchers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
@@ -38,8 +24,40 @@ export default function VouchersPage() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
 
-  const updateStatus = (id, newStatus) => {
-    setAllVouchers(allVouchers.map(v => v.id === id ? { ...v, status: newStatus } : v));
+  useEffect(() => {
+    async function fetchVouchers() {
+      const { data, error } = await supabase
+        .from('vouchers')
+        .select(`
+          id,
+          reference,
+          date,
+          status,
+          total_qty,
+          total_amount,
+          clients (name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (data) {
+        const formatted = data.map(v => ({
+          dbId: v.id,
+          id: v.reference,
+          client: v.clients?.name || 'Inconnu',
+          date: v.date,
+          mesure: v.total_qty,
+          amount: new Intl.NumberFormat('fr-FR').format(v.total_amount) + ' FCFA',
+          status: v.status
+        }));
+        setAllVouchers(formatted);
+      }
+    }
+    fetchVouchers();
+  }, []);
+
+  const updateStatus = async (dbId, newStatus) => {
+    await supabase.from('vouchers').update({ status: newStatus }).eq('id', dbId);
+    setAllVouchers(allVouchers.map(v => v.dbId === dbId ? { ...v, status: newStatus } : v));
   };
 
   const handleDeleteClick = (e, voucher) => {
@@ -48,9 +66,10 @@ export default function VouchersPage() {
     setAuthModalOpen(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (itemToDelete) {
-      setAllVouchers(allVouchers.filter(v => v.id !== itemToDelete.id));
+      await supabase.from('vouchers').delete().eq('id', itemToDelete.dbId);
+      setAllVouchers(allVouchers.filter(v => v.dbId !== itemToDelete.dbId));
       setAuthModalOpen(false);
       setItemToDelete(null);
     }
@@ -175,8 +194,8 @@ export default function VouchersPage() {
               {currentVouchers.length > 0 ? (
                 currentVouchers.map((voucher) => (
                   <tr 
-                    key={voucher.id} 
-                    onClick={() => router.push(`/bons/${voucher.id}`)}
+                    key={voucher.dbId} 
+                    onClick={() => router.push(`/bons/${voucher.dbId}`)}
                     className="hover:bg-primary/5 transition-colors cursor-pointer group"
                   >
                     <td className="px-6 py-4 font-medium text-gray-900 group-hover:text-primary transition-colors">{voucher.id}</td>
@@ -196,7 +215,7 @@ export default function VouchersPage() {
                         <div className="relative group/select">
                           <select 
                             value={voucher.status}
-                            onChange={(e) => updateStatus(voucher.id, e.target.value)}
+                            onChange={(e) => updateStatus(voucher.dbId, e.target.value)}
                             className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
                           >
                             <option value="Validé">Validé</option>
@@ -212,7 +231,7 @@ export default function VouchersPage() {
                     <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-3">
                         <button 
-                          onClick={(e) => { e.stopPropagation(); router.push(`/bons/${voucher.id}`); }}
+                          onClick={(e) => { e.stopPropagation(); router.push(`/bons/${voucher.dbId}`); }}
                           className="text-primary hover:text-primary/80 font-medium text-sm transition-colors"
                         >
                           Modifier

@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, FileText, Users, Settings, UserCircle, X, Package } from "lucide-react";
+import { canAccessPath } from "../lib/permissions";
 
 const navigation = [
   { name: "Tableau de Bord", href: "/", icon: LayoutDashboard },
@@ -15,6 +17,17 @@ const navigation = [
 
 export default function Sidebar({ isOpen, setIsOpen }) {
   const pathname = usePathname();
+  const [userRole, setUserRole] = useState(null);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem("currentUser");
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+      setUserRole(user.role);
+    }
+  }, []);
+
+  const filteredNavigation = navigation.filter(item => canAccessPath(userRole, item.href));
 
   return (
     <>
@@ -37,7 +50,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         
         <nav className="flex flex-1 flex-col px-4 py-6">
           <ul role="list" className="flex flex-1 flex-col gap-y-4">
-            {navigation.map((item) => {
+            {filteredNavigation.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <li key={item.name}>
