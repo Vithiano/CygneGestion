@@ -9,20 +9,30 @@ export default function SettingsPage() {
   const [logoPreview, setLogoPreview] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Form states
-  const [companyData, setCompanyData] = useState({
+  // Valeurs par défaut du profil entreprise
+  const defaultCompanyData = {
     name: "CygneGestion SARL",
     email: "contact@cygnegastion.ci",
     phone: "+225 01 02 03 04 05",
     address: "Zone Industrielle, Yopougon, Abidjan",
     rccm: "CI-ABJ-2023-B-12345",
     nif: "123456789X"
-  });
+  };
+
+  // Form states
+  const [companyData, setCompanyData] = useState(defaultCompanyData);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
+    // Charger le logo sauvegardé
     const savedLogo = localStorage.getItem('companyLogo');
     if (savedLogo) {
       setLogoPreview(savedLogo);
+    }
+    // Charger les données de l'entreprise sauvegardées
+    const savedCompanyData = localStorage.getItem('companyData');
+    if (savedCompanyData) {
+      setCompanyData(JSON.parse(savedCompanyData));
     }
   }, []);
 
@@ -58,13 +68,18 @@ export default function SettingsPage() {
     e.preventDefault();
     setIsLoading(true);
     
-    // Save to localStorage for client-side persistence
-    if (logoPreview) {
+    // Sauvegarder les données du profil entreprise
+    if (activeTab === 'company') {
       try {
-        localStorage.setItem('companyLogo', logoPreview);
+        // Sauvegarder les informations textuelles
+        localStorage.setItem('companyData', JSON.stringify(companyData));
+        // Sauvegarder le logo si présent
+        if (logoPreview) {
+          localStorage.setItem('companyLogo', logoPreview);
+        }
       } catch (error) {
-        console.error("Storage error:", error);
-        alert("L'image est trop volumineuse pour être sauvegardée. Veuillez choisir une image plus petite (moins de 2 MB).");
+        console.error("Erreur de sauvegarde:", error);
+        alert("L'image est trop volumineuse. Veuillez choisir une image plus petite (moins de 2 MB).");
         setIsLoading(false);
         return;
       }
@@ -72,7 +87,9 @@ export default function SettingsPage() {
 
     setTimeout(() => {
       setIsLoading(false);
-      // Optional: show a success toast here
+      // Afficher un message de succès
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
     }, 800);
   };
 
@@ -403,7 +420,12 @@ export default function SettingsPage() {
             )}
 
             {/* FORM FOOTER / SAVE BUTTON */}
-            <div className="px-8 py-5 border-t border-gray-100 bg-gray-50/80 flex items-center justify-end">
+            <div className="px-8 py-5 border-t border-gray-100 bg-gray-50/80 flex items-center justify-end gap-4">
+              {saveSuccess && (
+                <span className="text-sm font-medium text-green-600 animate-in fade-in duration-300">
+                  ✓ Modifications enregistrées avec succès !
+                </span>
+              )}
               <button
                 type="submit"
                 disabled={isLoading}
