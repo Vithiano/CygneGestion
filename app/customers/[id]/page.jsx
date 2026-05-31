@@ -35,7 +35,7 @@ export default function CustomerFormPage({ params }) {
             email: data.email || "",
             phone: data.phone || "",
             address: data.address || "",
-            status: "Actif"
+            status: data.status || "Actif"
           });
         }
         setIsFetching(false);
@@ -55,7 +55,9 @@ export default function CustomerFormPage({ params }) {
     const payload = {
       name: formData.name,
       email: formData.email,
-      phone: formData.phone
+      phone: formData.phone,
+      address: formData.address,
+      status: formData.status
     };
 
     if (isNew) {

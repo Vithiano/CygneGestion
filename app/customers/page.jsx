@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Download, ArrowUpDown, UserPlus, Trash2 } from "lucide-react";
+import { Search, Plus, Download, ArrowUpDown, UserPlus, Trash2, MoreVertical } from "lucide-react";
 import AdminAuthModal from "@/components/AdminAuthModal";
 import { supabase } from "../../lib/supabase";
 
@@ -19,6 +19,23 @@ export default function CustomersPage() {
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+  const [openStatusMenu, setOpenStatusMenu] = useState(null);
+
+  const handleUpdateStatus = async (e, id, currentStatus) => {
+    e.stopPropagation();
+    const newStatus = currentStatus === 'Actif' ? 'Inactif' : 'Actif';
+    
+    // Mettre à jour l'UI immédiatement (Optimistic update)
+    setCustomers(customers.map(c => c.dbId === id ? { ...c, status: newStatus } : c));
+    setOpenStatusMenu(null);
+
+    // Mettre à jour la base de données
+    const { error } = await supabase.from('clients').update({ status: newStatus }).eq('id', id);
+    if (error) {
+      alert("Erreur lors de la mise à jour du statut.");
+      // Revert in real app
+    }
+  };
 
   useEffect(() => {
     async function fetchCustomers() {
@@ -35,7 +52,7 @@ export default function CustomersPage() {
           email: c.email || 'Non renseigné',
           phone: c.phone || 'Non renseigné',
           date: c.created_at,
-          status: 'Actif' // Statut fictif pour l'UI, vu que la DB n'a pas de statut actif/inactif par defaut
+          status: c.status || 'Actif'
         })));
       }
     }
@@ -136,12 +153,36 @@ export default function CustomersPage() {
                       <div className="text-gray-500 text-xs mt-0.5">{customer.phone}</div>
                     </td>
                     <td className="px-6 py-4 text-gray-500 text-center">{formatDate(customer.date)}</td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium
-                        ${customer.status === 'Actif' ? 'bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20' : 'bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-500/20'}
-                      `}>
-                        {customer.status}
-                      </span>
+                    <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-center gap-2">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium
+                          ${customer.status === 'Actif' ? 'bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20' : 'bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-500/20'}
+                        `}>
+                          {customer.status}
+                        </span>
+                        <div className="relative">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenStatusMenu(openStatusMenu === customer.dbId ? null : customer.dbId);
+                            }}
+                            className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                            title="Modifier le statut"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          {openStatusMenu === customer.dbId && (
+                            <div className="absolute top-full right-0 mt-1 w-36 bg-white rounded-md shadow-lg border border-gray-100 py-1 z-10">
+                              <button
+                                onClick={(e) => handleUpdateStatus(e, customer.dbId, customer.status)}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                {customer.status === 'Actif' ? 'Rendre Inactif' : 'Rendre Actif'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-3">

@@ -18,7 +18,8 @@ export default function ArticleFormPage({ params }) {
     category: "",
     measure: "",
     price: "",
-    description: ""
+    description: "",
+    status: "Actif"
   });
 
   useEffect(() => {
@@ -37,7 +38,8 @@ export default function ArticleFormPage({ params }) {
             category: "Standard", // Mock
             measure: data.measure || "",
             price: data.price || "",
-            description: ""
+            description: "",
+            status: data.status || "Actif"
           });
         }
       }
@@ -56,7 +58,8 @@ export default function ArticleFormPage({ params }) {
     const payload = {
       name: formData.name,
       measure: formData.measure,
-      price: Number(formData.price) || 0
+      price: Number(formData.price) || 0,
+      status: formData.status
     };
 
     if (isNew) {
@@ -237,6 +240,24 @@ export default function ArticleFormPage({ params }) {
                   placeholder="Ex: 85000"
                   className="block w-full rounded-md border-0 py-2.5 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
                 />
+              </div>
+            </div>
+
+            <div className="sm:col-span-1">
+              <label htmlFor="status" className="block text-sm font-medium leading-6 text-gray-900">
+                Statut
+              </label>
+              <div className="mt-2">
+                <select
+                  id="status"
+                  name="status"
+                  value={formData.status}
+                  onChange={handleChange}
+                  className="block w-full rounded-md border-0 py-2.5 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
+                >
+                  <option value="Actif">Actif</option>
+                  <option value="Inactif">Inactif</option>
+                </select>
               </div>
             </div>
 

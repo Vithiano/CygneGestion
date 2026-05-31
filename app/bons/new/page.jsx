@@ -23,8 +23,8 @@ export default function NewVoucherPage() {
 
   useEffect(() => {
     async function fetchData() {
-      const { data: articles } = await supabase.from('articles').select('*');
-      const { data: clients } = await supabase.from('clients').select('*');
+      const { data: articles } = await supabase.from('articles').select('*').eq('status', 'Actif');
+      const { data: clients } = await supabase.from('clients').select('*').eq('status', 'Actif');
       if (articles) setArticlesDatabase(articles);
       if (clients) setClientsDatabase(clients);
     }
