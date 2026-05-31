@@ -62,6 +62,7 @@ export default function UserFormPage({ params }) {
       name: formData.name,
       pseudo: formData.pseudo,
       email: formData.email,
+      fonction: formData.fonction,
       role: formData.role,
       status: formData.status,
       password: formData.password // À sécuriser/hacher plus tard lors de l'intégration finale de l'authentification
