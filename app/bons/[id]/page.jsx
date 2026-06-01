@@ -157,8 +157,7 @@ export default function BonDetails({ params }) {
         if (insertError) throw insertError;
       }
       
-      // Force reload to avoid stale cache issues when navigating back
-      window.location.reload();
+      // Supression du rechargement forcé pour ne pas relancer le splash screen
     } catch (error) {
       console.error("Erreur lors de la mise à jour", error);
       alert("Une erreur est survenue lors de la sauvegarde: " + (error.message || "Erreur inconnue"));
@@ -182,8 +181,11 @@ export default function BonDetails({ params }) {
   };
 
   const addItem = () => {
-    const newItems = [...voucher.items, { article: "", measure: "", poNumber: "", qty: 1, price: 0, total: 0 }];
+    const newItems = [...voucher.items, { article: "", measure: "", poNumber: "", qty: 0, price: 0, total: 0 }];
     updateVoucherWithNewItems(newItems);
+    setTimeout(() => {
+      document.getElementById(`article-input-${newItems.length - 1}`)?.focus();
+    }, 50);
   };
 
   const removeItem = (index) => {
@@ -413,6 +415,7 @@ export default function BonDetails({ params }) {
                           <div className="flex gap-2">
                             <input 
                               type="text" 
+                              id={`article-input-${idx}`}
                               value={item.article} 
                               onChange={(e) => updateItem(idx, 'article', e.target.value)} 
                               onKeyDown={(e) => {
@@ -443,7 +446,7 @@ export default function BonDetails({ params }) {
                             </div>
                             <div>
                               <label className="text-[10px] text-gray-500">Quantité</label>
-                              <input type="number" value={item.qty} onChange={(e) => updateItem(idx, 'qty', parseInt(e.target.value) || 0)} className="block w-full rounded-md border-gray-300 py-1.5 px-2 shadow-sm text-sm ring-1 ring-inset ring-gray-300" />
+                              <input type="number" min="0" step="any" value={item.qty} onChange={(e) => updateItem(idx, 'qty', parseFloat(e.target.value) || 0)} className="block w-full rounded-md border-gray-300 py-1.5 px-2 shadow-sm text-sm ring-1 ring-inset ring-gray-300" />
                             </div>
                             <div>
                               <label className="text-[10px] text-gray-500">Prix Unitaire</label>

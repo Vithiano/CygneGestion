@@ -75,14 +75,18 @@ export default function NewVoucherPage() {
   
   // Articles lines
   const [lines, setLines] = useState([
-    { id: 1, poNumber: "", article: "", measure: "", quantity: 1, unitPrice: 0, total: 0 }
+    { id: 1, poNumber: "", article: "", measure: "", quantity: 0, unitPrice: 0, total: 0 }
   ]);
 
   const addLine = () => {
+    const newLineId = Date.now();
     setLines([
       ...lines,
-      { id: Date.now(), poNumber: "", article: "", measure: "", quantity: 1, unitPrice: 0, total: 0 }
+      { id: newLineId, poNumber: "", article: "", measure: "", quantity: 0, unitPrice: 0, total: 0 }
     ]);
+    setTimeout(() => {
+      document.getElementById(`poNumber-${newLineId}`)?.focus();
+    }, 50);
   };
 
   const removeLine = (idToRemove) => {
@@ -194,7 +198,7 @@ export default function NewVoucherPage() {
 
       if (itemsError) throw itemsError;
 
-      window.location.href = "/vouchers";
+      router.push("/vouchers");
     } catch (error) {
       console.error('Error saving voucher:', error);
       alert(`Une erreur est survenue lors de l'enregistrement du bon : ${error.message || JSON.stringify(error)}`);
@@ -327,6 +331,7 @@ export default function NewVoucherPage() {
                   <td className="py-3 pr-2">
                     <input
                       type="text"
+                      id={`poNumber-${line.id}`}
                       value={line.poNumber}
                       onChange={(e) => updateLine(line.id, 'poNumber', e.target.value)}
                       placeholder="N° BC..."
@@ -377,8 +382,8 @@ export default function NewVoucherPage() {
                   <td className="py-3 px-2">
                     <input
                       type="number"
-                      min="0.1"
-                      step="0.1"
+                      min="0"
+                      step="any"
                       value={line.quantity}
                       onChange={(e) => updateLine(line.id, 'quantity', e.target.value)}
                       required
