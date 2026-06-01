@@ -36,6 +36,32 @@ export default function NewVoucherPage() {
       const { data: clients } = await supabase.from('clients').select('*').eq('status', 'Actif');
       if (articles) setArticlesDatabase(articles);
       if (clients) setClientsDatabase(clients);
+
+      // Générer automatiquement la référence
+      const currentYear = new Date().getFullYear();
+      
+      // Chercher le dernier bon pour extraire son numéro
+      const { data: lastVoucher } = await supabase
+        .from('vouchers')
+        .select('reference')
+        .ilike('reference', `BON-${currentYear}-%`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      let nextNumber = 1;
+      if (lastVoucher && lastVoucher.reference) {
+        const parts = lastVoucher.reference.split('-');
+        if (parts.length === 3) {
+          const lastNum = parseInt(parts[2], 10);
+          if (!isNaN(lastNum)) {
+            nextNumber = lastNum + 1;
+          }
+        }
+      }
+      
+      const newReference = `BON-${currentYear}-${String(nextNumber).padStart(3, '0')}`;
+      setReference(newReference);
     }
     fetchData();
   }, []);
@@ -215,9 +241,8 @@ export default function NewVoucherPage() {
                   id="reference"
                   value={reference}
                   onChange={(e) => setReference(e.target.value)}
-                  required
-                  placeholder="ex: BON-2024-015"
-                  className="block w-full rounded-md border-0 py-2.5 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
+                  readOnly
+                  className="block w-full rounded-md border-0 py-2.5 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 bg-gray-50 sm:text-sm sm:leading-6 cursor-not-allowed"
                 />
               </div>
             </div>
