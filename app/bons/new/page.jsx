@@ -21,7 +21,16 @@ export default function NewVoucherPage() {
   const [articlesDatabase, setArticlesDatabase] = useState([]);
   const [clientsDatabase, setClientsDatabase] = useState([]);
 
+  // État pour l'utilisateur courant
+  const [currentUser, setCurrentUser] = useState(null);
+
   useEffect(() => {
+    // Récupérer l'utilisateur connecté depuis le localStorage
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+      setCurrentUser(JSON.parse(savedUser));
+    }
+
     async function fetchData() {
       const { data: articles } = await supabase.from('articles').select('*').eq('status', 'Actif');
       const { data: clients } = await supabase.from('clients').select('*').eq('status', 'Actif');
@@ -120,6 +129,9 @@ export default function NewVoucherPage() {
     setIsLoading(true);
 
     try {
+      // Récupérer le nom de l'utilisateur courant pour la traçabilité
+      const creatorName = currentUser?.name || 'Inconnu';
+
       // 1. Insert Voucher
       const { data: voucherData, error: voucherError } = await supabase
         .from('vouchers')
@@ -129,7 +141,10 @@ export default function NewVoucherPage() {
           date,
           status: 'Brouillon',
           total_qty: calculateTotalQuantity(),
-          total_amount: calculateGrandTotal()
+          total_amount: calculateGrandTotal(),
+          // Traçabilité : enregistrer le créateur du bon
+          created_by: creatorName,
+          updated_by: creatorName
         }])
         .select()
         .single();

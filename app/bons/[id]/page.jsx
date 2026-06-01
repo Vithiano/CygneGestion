@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, FileText, CheckCircle, Clock, XCircle, Printer, Edit, Download, Trash2, Plus, Search } from "lucide-react";
+import { ArrowLeft, FileText, CheckCircle, Clock, XCircle, Printer, Edit, Download, Trash2, Plus, Search, UserCircle, PenLine } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 
 export default function BonDetails({ params }) {
@@ -36,7 +36,10 @@ export default function BonDetails({ params }) {
     status: "",
     items: [],
     totalAmount: 0,
-    totalQty: 0
+    totalQty: 0,
+    // Champs de traçabilité (back-office uniquement)
+    createdBy: "",
+    updatedBy: ""
   });
 
   useEffect(() => {
@@ -95,7 +98,10 @@ export default function BonDetails({ params }) {
             total: Number(item.total)
           })) : [],
           totalAmount: Number(v.total_amount),
-          totalQty: Number(v.total_qty)
+          totalQty: Number(v.total_qty),
+          // Champs de traçabilité récupérés depuis Supabase
+          createdBy: v.created_by || 'Non renseigné',
+          updatedBy: v.updated_by || 'Non renseigné'
         });
       }
     }
@@ -115,15 +121,24 @@ export default function BonDetails({ params }) {
   const handleSaveClick = async () => {
     setIsEditing(false);
     try {
+      // Nom de l'utilisateur qui effectue la modification
+      const editorName = currentUser?.name || 'Inconnu';
+
       const { error: updateError } = await supabase.from('vouchers').update({
         client_id: voucher.clientUuid,
         date: voucher.date,
         status: voucher.status,
         total_qty: voucher.totalQty,
-        total_amount: voucher.totalAmount
+        total_amount: voucher.totalAmount,
+        // Traçabilité : mettre à jour le dernier modificateur
+        updated_by: editorName
       }).eq('id', voucher.dbId);
 
+      // Vérifier l'erreur avant de mettre à jour l'état local
       if (updateError) throw updateError;
+
+      // Mise à jour locale de l'affichage pour refléter la modification
+      setVoucher(prev => ({ ...prev, updatedBy: editorName }));
 
       const { error: deleteError } = await supabase.from('voucher_items').delete().eq('voucher_id', voucher.dbId);
       if (deleteError) throw deleteError;
@@ -316,6 +331,27 @@ export default function BonDetails({ params }) {
                         {voucher.status}
                       </span>
                     </dd>
+                  </div>
+
+                  {/* Séparateur de traçabilité — visible uniquement en back-office */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Traçabilité</p>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3 p-3 bg-blue-50/60 rounded-lg ring-1 ring-inset ring-blue-100">
+                        <UserCircle className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs font-medium text-gray-500">Créé par</p>
+                          <p className="text-sm font-semibold text-gray-800">{voucher.createdBy}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 bg-amber-50/60 rounded-lg ring-1 ring-inset ring-amber-100">
+                        <PenLine className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs font-medium text-gray-500">Dernière modification par</p>
+                          <p className="text-sm font-semibold text-gray-800">{voucher.updatedBy}</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </dl>
               ) : (
