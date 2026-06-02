@@ -42,6 +42,9 @@ export default function BonDetails({ params }) {
     updatedBy: ""
   });
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
+
   useEffect(() => {
     // Récupérer l'utilisateur courant
     const savedUser = localStorage.getItem('currentUser');
@@ -62,47 +65,64 @@ export default function BonDetails({ params }) {
     }
 
     async function fetchData() {
-      // Fetch articles and clients for modals
-      const { data: articles } = await supabase.from('articles').select('*').eq('status', 'Actif');
-      const { data: clients } = await supabase.from('clients').select('*').eq('status', 'Actif');
-      if (articles) setArticlesDatabase(articles);
-      if (clients) setClientsDatabase(clients);
-
-      // Fetch Voucher
-      const { data: v } = await supabase
-        .from('vouchers')
-        .select('*, clients(name, client_id)')
-        .eq('id', id)
-        .single();
+      setIsLoading(true);
+      setFetchError(null);
+      try {
+        // Fetch articles and clients for modals
+        const { data: articles, error: articlesError } = await supabase.from('articles').select('*').eq('status', 'Actif');
+        const { data: clients, error: clientsError } = await supabase.from('clients').select('*').eq('status', 'Actif');
         
-      if (v) {
-        const { data: items } = await supabase
-          .from('voucher_items')
-          .select('*')
-          .eq('voucher_id', v.id);
+        if (articlesError) throw articlesError;
+        if (clientsError) throw clientsError;
+        
+        if (articles) setArticlesDatabase(articles);
+        if (clients) setClientsDatabase(clients);
 
-        setVoucher({
-          id: v.reference,
-          dbId: v.id,
-          client: v.clients?.name || 'Inconnu',
-          clientId: v.clients?.client_id || '',
-          clientUuid: v.client_id,
-          date: v.date,
-          status: v.status,
-          items: items ? items.map(item => ({
-            article: item.article_name,
-            measure: item.measure,
-            poNumber: item.po_number || "",
-            qty: Number(item.quantity),
-            price: Number(item.unit_price),
-            total: Number(item.total)
-          })) : [],
-          totalAmount: Number(v.total_amount),
-          totalQty: Number(v.total_qty),
-          // Champs de traçabilité récupérés depuis Supabase
-          createdBy: v.created_by || 'Non renseigné',
-          updatedBy: v.updated_by || 'Non renseigné'
-        });
+        // Fetch Voucher
+        const { data: v, error: voucherError } = await supabase
+          .from('vouchers')
+          .select('*, clients(name, client_id)')
+          .eq('id', id)
+          .single();
+          
+        if (voucherError) throw voucherError;
+          
+        if (v) {
+          const { data: items, error: itemsError } = await supabase
+            .from('voucher_items')
+            .select('*')
+            .eq('voucher_id', v.id);
+
+          if (itemsError) throw itemsError;
+
+          setVoucher({
+            id: v.reference,
+            dbId: v.id,
+            client: v.clients?.name || 'Inconnu',
+            clientId: v.clients?.client_id || '',
+            clientUuid: v.client_id,
+            date: v.date,
+            status: v.status,
+            items: items ? items.map(item => ({
+              article: item.article_name,
+              measure: item.measure,
+              poNumber: item.po_number || "",
+              qty: Number(item.quantity),
+              price: Number(item.unit_price),
+              total: Number(item.total)
+            })) : [],
+            totalAmount: Number(v.total_amount),
+            totalQty: Number(v.total_qty),
+            // Champs de traçabilité récupérés depuis Supabase
+            createdBy: v.created_by || 'Non renseigné',
+            updatedBy: v.updated_by || 'Non renseigné'
+          });
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement des données:", error);
+        setFetchError(error.message || "Impossible de se connecter à la base de données. Vérifiez votre connexion ou vos variables d'environnement.");
+      } finally {
+        setIsLoading(false);
       }
     }
     fetchData();
@@ -124,43 +144,38 @@ export default function BonDetails({ params }) {
       // Nom de l'utilisateur qui effectue la modification
       const editorName = currentUser?.name || 'Inconnu';
 
-      const { error: updateError } = await supabase.from('vouchers').update({
-        client_id: voucher.clientUuid,
-        date: voucher.date,
-        status: voucher.status,
-        total_qty: voucher.totalQty,
-        total_amount: voucher.totalAmount,
-        // Traçabilité : mettre à jour le dernier modificateur
-        updated_by: editorName
-      }).eq('id', voucher.dbId);
+      // Préparation des articles pour l'envoi JSON
+      const itemsPayload = voucher.items.map(line => ({
+        po_number: line.poNumber || null,
+        article_name: line.article,
+        measure: line.measure,
+        quantity: line.qty,
+        unit_price: line.price,
+        total: line.total
+      }));
 
-      // Vérifier l'erreur avant de mettre à jour l'état local
-      if (updateError) throw updateError;
+      // Appel de la fonction sécurisée RPC (Transaction Atomique)
+      const { error: rpcError } = await supabase.rpc('update_voucher_safely', {
+        p_voucher_id: voucher.dbId,
+        p_client_id: voucher.clientUuid,
+        p_date: voucher.date,
+        p_status: voucher.status,
+        p_total_qty: voucher.totalQty,
+        p_total_amount: voucher.totalAmount,
+        p_updated_by: editorName,
+        p_items: itemsPayload
+      });
+
+      if (rpcError) throw rpcError;
 
       // Mise à jour locale de l'affichage pour refléter la modification
       setVoucher(prev => ({ ...prev, updatedBy: editorName }));
 
-      const { error: deleteError } = await supabase.from('voucher_items').delete().eq('voucher_id', voucher.dbId);
-      if (deleteError) throw deleteError;
-      
-      if (voucher.items.length > 0) {
-        const itemsToInsert = voucher.items.map(line => ({
-          voucher_id: voucher.dbId,
-          po_number: line.poNumber,
-          article_name: line.article,
-          measure: line.measure,
-          quantity: line.qty,
-          unit_price: line.price,
-          total: line.total
-        }));
-        const { error: insertError } = await supabase.from('voucher_items').insert(itemsToInsert);
-        if (insertError) throw insertError;
-      }
-      
-      // Supression du rechargement forcé pour ne pas relancer le splash screen
     } catch (error) {
       console.error("Erreur lors de la mise à jour", error);
       alert("Une erreur est survenue lors de la sauvegarde: " + (error.message || "Erreur inconnue"));
+      // En cas d'erreur, on annule visuellement l'édition
+      setVoucher(originalVoucher);
     }
   };
 
