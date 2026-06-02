@@ -151,7 +151,8 @@ export default function NewVoucherPage() {
   };
 
   const calculateTotalQuantity = () => {
-    return lines.reduce((acc, line) => acc + Number(line.quantity), 0);
+    const rawTotalQty = lines.reduce((acc, line) => acc + Number(line.quantity), 0);
+    return Number(rawTotalQty.toFixed(3));
   };
 
   const handleSubmit = async (e) => {

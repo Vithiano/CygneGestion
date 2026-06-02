@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, FileText, CheckCircle, Clock, XCircle, Printer, Edit, Download, Trash2, Plus, Search, UserCircle, PenLine } from "lucide-react";
@@ -25,6 +25,12 @@ export default function BonDetails({ params }) {
 
   const [articlesDatabase, setArticlesDatabase] = useState([]);
   const [clientsDatabase, setClientsDatabase] = useState([]);
+
+  const [isItemEditorModalOpen, setIsItemEditorModalOpen] = useState(false);
+  const [editingItemIndex, setEditingItemIndex] = useState(null);
+  const [tempItem, setTempItem] = useState({
+    article: "", measure: "", poNumber: "", qty: 0, price: 0, total: 0
+  });
 
   const [voucher, setVoucher] = useState({
     id: id,
@@ -183,24 +189,82 @@ export default function BonDetails({ params }) {
     setVoucher({ ...voucher, [field]: value });
   };
 
-  const updateItem = (index, field, value) => {
-    const newItems = [...voucher.items];
-    newItems[index][field] = value;
-    
-    // Recalculate item total if qty or price changed
-    if (field === 'qty' || field === 'price') {
-      newItems[index].total = newItems[index].qty * newItems[index].price;
+  const openItemModal = (index = null) => {
+    if (index !== null) {
+      setTempItem({ ...voucher.items[index] });
+      setEditingItemIndex(index);
+    } else {
+      setTempItem({ article: "", measure: "", poNumber: "", qty: 0, price: 0, total: 0 });
+      setEditingItemIndex(null);
     }
-
-    updateVoucherWithNewItems(newItems);
+    setIsItemEditorModalOpen(true);
+    setTimeout(() => {
+      articleInputRef.current?.focus();
+    }, 50);
   };
 
-  const addItem = () => {
-    const newItems = [...voucher.items, { article: "", measure: "", poNumber: "", qty: 0, price: 0, total: 0 }];
+  const closeItemModal = () => {
+    setIsItemEditorModalOpen(false);
+    setTempItem({ article: "", measure: "", poNumber: "", qty: 0, price: 0, total: 0 });
+    setEditingItemIndex(null);
+  };
+
+  const handleTempItemChange = (field, value) => {
+    setTempItem(prev => {
+      const updated = { ...prev, [field]: value };
+      if (field === 'qty' || field === 'price') {
+        updated.total = (Number(updated.qty) || 0) * (Number(updated.price) || 0);
+      }
+      return updated;
+    });
+  };
+
+  const articleInputRef = useRef(null);
+
+  const applyItemModal = () => {
+    if (!tempItem.article) {
+      alert("Veuillez sélectionner un article.");
+      return;
+    }
+    const newItems = [...voucher.items];
+    const total = (Number(tempItem.qty) || 0) * (Number(tempItem.price) || 0);
+    const itemToSave = { ...tempItem, total };
+    
+    if (editingItemIndex !== null) {
+      newItems[editingItemIndex] = itemToSave;
+    } else {
+      newItems.push(itemToSave);
+    }
+    
     updateVoucherWithNewItems(newItems);
+    
+    // Reset pour le prochain ajout
+    setTempItem({ article: "", measure: "", poNumber: "", qty: 0, price: 0, total: 0 });
+    setEditingItemIndex(null);
+
+    // Retourner au premier champ (Article)
     setTimeout(() => {
-      document.getElementById(`article-input-${newItems.length - 1}`)?.focus();
+      articleInputRef.current?.focus();
     }, 50);
+  };
+
+  const saveItemModal = () => {
+    if (!tempItem.article) {
+      alert("Veuillez sélectionner un article.");
+      return;
+    }
+    const newItems = [...voucher.items];
+    const total = (Number(tempItem.qty) || 0) * (Number(tempItem.price) || 0);
+    const itemToSave = { ...tempItem, total };
+    
+    if (editingItemIndex !== null) {
+      newItems[editingItemIndex] = itemToSave;
+    } else {
+      newItems.push(itemToSave);
+    }
+    
+    updateVoucherWithNewItems(newItems);
+    closeItemModal();
   };
 
   const removeItem = (index) => {
@@ -209,7 +273,10 @@ export default function BonDetails({ params }) {
   };
 
   const updateVoucherWithNewItems = (newItems) => {
-    const newTotalQty = newItems.reduce((acc, item) => acc + item.qty, 0);
+    // Utilisation de Number(val.toFixed(3)) pour éviter le problème des nombres flottants en JS (ex: 0.1 + 0.2 = 0.30000000000000004)
+    const rawTotalQty = newItems.reduce((acc, item) => acc + item.qty, 0);
+    const newTotalQty = Number(rawTotalQty.toFixed(3));
+    
     const newTotalAmount = newItems.reduce((acc, item) => acc + item.total, 0);
 
     setVoucher({
@@ -220,23 +287,22 @@ export default function BonDetails({ params }) {
     });
   };
 
-  const handleOpenSearchModal = (index, query) => {
-    setActiveItemIndex(index);
+  const handleOpenSearchModal = (query) => {
     setSearchQuery(query || "");
     setIsArticleModalOpen(true);
   };
 
   const handleSelectArticle = (article) => {
-    if (activeItemIndex !== null) {
-      const newItems = [...voucher.items];
-      newItems[activeItemIndex].article = article.name;
-      newItems[activeItemIndex].measure = article.measure;
-      newItems[activeItemIndex].price = article.price;
-      // Recalculate total for this item
-      newItems[activeItemIndex].total = newItems[activeItemIndex].qty * article.price;
-      
-      updateVoucherWithNewItems(newItems);
-    }
+    setTempItem(prev => {
+      const updated = {
+        ...prev,
+        article: article.name,
+        measure: article.measure,
+        price: article.price
+      };
+      updated.total = (Number(updated.qty) || 0) * article.price;
+      return updated;
+    });
     setIsArticleModalOpen(false);
   };
 
@@ -415,65 +481,43 @@ export default function BonDetails({ params }) {
                     <h3 className="text-sm font-medium text-gray-900 mb-3">Articles</h3>
                     <div className="space-y-3 max-h-72 overflow-y-auto pr-2">
                       {voucher.items.map((item, idx) => (
-                        <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2 relative group">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="text-xs font-bold text-gray-500">Article {idx + 1}</div>
+                        <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between group">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{item.article}</p>
+                            <p className="text-xs text-gray-500">
+                              N° BC: {item.poNumber || "-"} • Qté: {item.qty} {item.measure} • P.U: {item.price.toLocaleString()} CFA
+                            </p>
+                            <p className="text-sm font-bold text-primary mt-1">{item.total.toLocaleString()} CFA</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              type="button" 
+                              onClick={() => openItemModal(idx)} 
+                              className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 p-2 rounded transition-colors"
+                              title="Modifier l'article"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
                             <button 
                               type="button" 
                               onClick={() => removeItem(idx)} 
-                              className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors opacity-0 group-hover:opacity-100"
+                              className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-2 rounded transition-colors"
                               title="Retirer l'article"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
-                          </div>
-                          <div className="flex gap-2">
-                            <input 
-                              type="text" 
-                              id={`article-input-${idx}`}
-                              value={item.article} 
-                              onChange={(e) => updateItem(idx, 'article', e.target.value)} 
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleOpenSearchModal(idx, item.article);
-                                }
-                              }}
-                              placeholder="Nom article (Entrée pour chercher)" 
-                              className="block w-full rounded-md border-gray-300 py-1.5 px-2 shadow-sm text-sm ring-1 ring-inset ring-gray-300" 
-                            />
-                            <button 
-                              type="button"
-                              onClick={() => handleOpenSearchModal(idx, item.article)}
-                              className="inline-flex items-center justify-center rounded-md bg-gray-50 px-2.5 py-1.5 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-100"
-                            >
-                              <Search className="w-4 h-4" />
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 mt-2">
-                            <div>
-                              <label className="text-[10px] text-gray-500">N° Commande</label>
-                              <input type="text" value={item.poNumber} onChange={(e) => updateItem(idx, 'poNumber', e.target.value)} placeholder="PO-..." className="block w-full rounded-md border-gray-300 py-1.5 px-2 shadow-sm text-sm ring-1 ring-inset ring-gray-300" />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500">Unité</label>
-                              <input type="text" value={item.measure} onChange={(e) => updateItem(idx, 'measure', e.target.value)} placeholder="Tonne, Kg..." className="block w-full rounded-md border-gray-300 py-1.5 px-2 shadow-sm text-sm ring-1 ring-inset ring-gray-300" />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500">Quantité</label>
-                              <input type="number" min="0" step="any" value={item.qty} onChange={(e) => updateItem(idx, 'qty', parseFloat(e.target.value) || 0)} className="block w-full rounded-md border-gray-300 py-1.5 px-2 shadow-sm text-sm ring-1 ring-inset ring-gray-300" />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500">Prix Unitaire</label>
-                              <input type="number" value={item.price} onChange={(e) => updateItem(idx, 'price', parseInt(e.target.value) || 0)} className="block w-full rounded-md border-gray-300 py-1.5 px-2 shadow-sm text-sm ring-1 ring-inset ring-gray-300" />
-                            </div>
                           </div>
                         </div>
                       ))}
+                      {voucher.items.length === 0 && (
+                        <div className="text-center py-6 text-sm text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                          Aucun article dans ce bon.
+                        </div>
+                      )}
                     </div>
                     <button 
                       type="button" 
-                      onClick={addItem}
+                      onClick={() => openItemModal()}
                       className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition-colors"
                     >
                       <Plus className="w-4 h-4" />
@@ -583,7 +627,7 @@ export default function BonDetails({ params }) {
                   <div className="w-1/2">
                     <div className="flex justify-between py-2 border-b border-gray-100">
                       <span className="text-gray-600 text-sm">Quantité totale</span>
-                      <span className="font-medium text-gray-900">{voucher.totalQty} {voucher.items.length > 0 && voucher.items[0].measure ? voucher.items[0].measure + (voucher.totalQty > 1 && !voucher.items[0].measure.endsWith('s') ? 's' : '') : 'Unités'}</span>
+                      <span className="font-medium text-gray-900">{Number(voucher.totalQty.toFixed(3))} {voucher.items.length > 0 && voucher.items[0].measure ? voucher.items[0].measure + (voucher.totalQty > 1 && !voucher.items[0].measure.endsWith('s') ? 's' : '') : 'Unités'}</span>
                     </div>
                     <div className="flex justify-between py-3 border-b-2 border-gray-900">
                       <span className="font-bold text-gray-900">Montant Global</span>
@@ -612,9 +656,160 @@ export default function BonDetails({ params }) {
         </div>
       </div>
 
+      {/* MODALE D'ÉDITION D'ARTICLE */}
+      {isItemEditorModalOpen && (
+        <div className="fixed inset-0 z-[40] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" onClick={closeItemModal}></div>
+          
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {editingItemIndex !== null ? "Modifier l'article" : "Ajouter un article"}
+              </h3>
+              <button onClick={closeItemModal} className="text-gray-400 hover:text-gray-500">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Article <span className="text-red-500">*</span></label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    ref={articleInputRef}
+                    value={tempItem.article} 
+                    onChange={(e) => handleTempItemChange('article', e.target.value)} 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleOpenSearchModal(tempItem.article);
+                      }
+                    }}
+                    placeholder="Nom de l'article (Entrée pour chercher)" 
+                    className="block w-full rounded-md border-gray-300 py-2 px-3 shadow-sm focus:border-primary focus:ring-primary sm:text-sm ring-1 ring-inset ring-gray-300" 
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => handleOpenSearchModal(tempItem.article)}
+                    className="inline-flex items-center justify-center rounded-md bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-100"
+                  >
+                    <Search className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">N° de Commande (Optionnel)</label>
+                <input 
+                  type="text" 
+                  value={tempItem.poNumber} 
+                  onChange={(e) => handleTempItemChange('poNumber', e.target.value)} 
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      applyItemModal();
+                    }
+                  }}
+                  placeholder="PO-12345" 
+                  className="block w-full rounded-md border-gray-300 py-2 px-3 shadow-sm focus:border-primary focus:ring-primary sm:text-sm ring-1 ring-inset ring-gray-300" 
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Unité</label>
+                  <select 
+                    value={tempItem.measure} 
+                    onChange={(e) => handleTempItemChange('measure', e.target.value)} 
+                    className="block w-full rounded-md border-gray-300 py-2 px-3 shadow-sm focus:border-primary focus:ring-primary sm:text-sm ring-1 ring-inset ring-gray-300"
+                  >
+                    <option value="">Sélectionner...</option>
+                    <option value="Tonne">Tonne (t)</option>
+                    <option value="Kilogramme">Kilogramme (kg)</option>
+                    <option value="Litre">Litre (L)</option>
+                    <option value="Botte">Botte</option>
+                    <option value="Unité">Unité</option>
+                    <option value="Pot">Pot</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Prix Unitaire</label>
+                  <div className="relative">
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={tempItem.price} 
+                      onChange={(e) => handleTempItemChange('price', parseFloat(e.target.value) || 0)} 
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applyItemModal();
+                        }
+                      }}
+                      className="block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 shadow-sm focus:border-primary focus:ring-primary sm:text-sm ring-1 ring-inset ring-gray-300 text-right" 
+                    />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                      <span className="text-gray-500 sm:text-sm">CFA</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quantité</label>
+                <input 
+                  type="number" 
+                  min="0" 
+                  step="any"
+                  value={tempItem.qty} 
+                  onChange={(e) => handleTempItemChange('qty', parseFloat(e.target.value) || 0)} 
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      applyItemModal();
+                    }
+                  }}
+                  className="block w-full rounded-md border-gray-300 py-2 px-3 shadow-sm focus:border-primary focus:ring-primary sm:text-sm ring-1 ring-inset ring-gray-300 text-right" 
+                />
+              </div>
+
+              <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-500">Total de la ligne</span>
+                <span className="text-lg font-bold text-primary">{tempItem.total.toLocaleString()} CFA</span>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3 justify-end">
+              <button 
+                type="button" 
+                onClick={closeItemModal} 
+                className="inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition-colors"
+              >
+                Annuler
+              </button>
+              <button 
+                type="button" 
+                onClick={applyItemModal} 
+                className="inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-primary shadow-sm ring-1 ring-inset ring-primary hover:bg-blue-50 transition-colors"
+              >
+                Appliquer
+              </button>
+              <button 
+                type="button" 
+                onClick={saveItemModal} 
+                className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition-colors"
+              >
+                Valider
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ARTICLE SEARCH MODAL */}
       {isArticleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" onClick={() => setIsArticleModalOpen(false)}></div>
           
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
@@ -673,7 +868,7 @@ export default function BonDetails({ params }) {
       )}
       {/* CLIENT SEARCH MODAL */}
       {isClientModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" onClick={() => setIsClientModalOpen(false)}></div>
           
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
