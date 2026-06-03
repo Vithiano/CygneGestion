@@ -22,6 +22,9 @@ export default function SettingsPage() {
   // Form states
   const [companyData, setCompanyData] = useState(defaultCompanyData);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [roleError, setRoleError] = useState("");
 
   useEffect(() => {
     // Charger le logo sauvegardé
@@ -62,6 +65,26 @@ export default function SettingsPage() {
         [module]: !prev[role][module]
       }
     }));
+  };
+
+  const handleAddRoleSubmit = (e) => {
+    e.preventDefault();
+    setRoleError("");
+    if (newRoleName && newRoleName.trim() !== "") {
+      const trimmedName = newRoleName.trim();
+      if (!permissions[trimmedName]) {
+        setPermissions(prev => ({
+          ...prev,
+          [trimmedName]: { vouchers: false, articles: false, customers: false, users: false, settings: false }
+        }));
+        setIsRoleModalOpen(false);
+        setNewRoleName("");
+      } else {
+        setRoleError("Ce rôle existe déjà.");
+      }
+    } else {
+      setRoleError("Veuillez entrer un nom de rôle.");
+    }
   };
 
   const handleSave = (e) => {
@@ -373,7 +396,7 @@ export default function SettingsPage() {
                     <h2 className="text-lg font-semibold text-gray-900">Rôles & Permissions</h2>
                     <p className="text-sm text-gray-500 mt-1">Définissez ce que chaque rôle peut voir ou modifier sur la plateforme.</p>
                   </div>
-                  <button type="button" className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary bg-primary/10 rounded-md hover:bg-primary/20 transition-colors">
+                  <button type="button" onClick={() => setIsRoleModalOpen(true)} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary bg-primary/10 rounded-md hover:bg-primary/20 transition-colors">
                     + Nouveau rôle
                   </button>
                 </div>
@@ -383,9 +406,9 @@ export default function SettingsPage() {
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
                         <th className="px-6 py-4 font-semibold text-gray-900">Modules & Fonctionnalités</th>
-                        <th className="px-6 py-4 font-semibold text-center text-gray-900">Administrateur</th>
-                        <th className="px-6 py-4 font-semibold text-center text-gray-900">Manager</th>
-                        <th className="px-6 py-4 font-semibold text-center text-gray-900">Opérateur</th>
+                        {Object.keys(permissions).map((role) => (
+                          <th key={role} className="px-6 py-4 font-semibold text-center text-gray-900">{role}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
@@ -398,7 +421,7 @@ export default function SettingsPage() {
                       ].map((module) => (
                         <tr key={module.id} className="hover:bg-gray-50/50">
                           <td className="px-6 py-4 font-medium text-gray-900">{module.name}</td>
-                          {["Administrateur", "Manager", "Opérateur"].map((role) => (
+                          {Object.keys(permissions).map((role) => (
                             <td key={role} className="px-6 py-4 text-center">
                               <button
                                 type="button"
@@ -442,6 +465,58 @@ export default function SettingsPage() {
           </form>
         </div>
       </div>
+
+      {/* MODAL NOUVEAU ROLE */}
+      {isRoleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Créer un nouveau rôle</h3>
+            <form onSubmit={handleAddRoleSubmit}>
+              <div>
+                <label htmlFor="roleName" className="block text-sm font-medium leading-6 text-gray-900">
+                  Nom du rôle
+                </label>
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    id="roleName"
+                    value={newRoleName}
+                    onChange={(e) => {
+                      setNewRoleName(e.target.value);
+                      if (roleError) setRoleError("");
+                    }}
+                    autoFocus
+                    className="block w-full rounded-md border-0 py-2.5 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-primary sm:text-sm"
+                    placeholder="Ex: Superviseur"
+                  />
+                </div>
+                {roleError && (
+                  <p className="mt-2 text-sm text-red-600">{roleError}</p>
+                )}
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRoleModalOpen(false);
+                    setNewRoleName("");
+                    setRoleError("");
+                  }}
+                  className="rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition-colors"
+                >
+                  Créer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
