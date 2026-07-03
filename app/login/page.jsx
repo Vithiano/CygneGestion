@@ -54,9 +54,13 @@ export default function Login() {
       <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 lg:flex-none lg:w-1/2 lg:px-20 xl:px-24 bg-white">
         <div className="mx-auto w-full max-w-sm lg:w-96">
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
-            <h2 className="mt-8 text-3xl font-bold leading-9 tracking-tight text-gray-900">
-              CygneGestion
-            </h2>
+            {typeof window !== 'undefined' && localStorage.getItem('companyLogo') ? (
+              <img src={localStorage.getItem('companyLogo')} alt="Logo Entreprise" className="mt-8 h-12 object-contain" />
+            ) : (
+              <h2 className="mt-8 text-3xl font-bold leading-9 tracking-tight text-gray-900">
+                CygneGestion
+              </h2>
+            )}
             <p className="mt-2 text-sm leading-6 text-gray-500">
               Bienvenue. Connectez-vous pour accéder à votre espace de travail.
             </p>
