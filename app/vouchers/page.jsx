@@ -103,7 +103,16 @@ export default function VouchersPage() {
         jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
       };
       
-      await html2pdf().set(opt).from(element).save();
+      await html2pdf()
+        .set(opt)
+        .from(element)
+        .toPdf()
+        .output('blob')
+        .then(function(pdfBlob) {
+          const blobUrl = URL.createObjectURL(pdfBlob);
+          window.open(blobUrl, '_blank');
+        });
+      
       // Optionnel : vider la sélection après impression
       // setSelectedVouchers([]);
     } catch (error) {

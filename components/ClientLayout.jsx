@@ -9,7 +9,7 @@ import { canAccessPath } from "../lib/permissions";
 export default function ClientLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(false);
   const [companyLogo, setCompanyLogo] = useState(null);
   
   const pathname = usePathname();
@@ -21,13 +21,6 @@ export default function ClientLayout({ children }) {
     if (savedLogo) {
       setCompanyLogo(savedLogo);
     }
-
-    // Hide splash screen after 3 seconds
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-    }, 3000);
-
-    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
